@@ -8,6 +8,7 @@ import {
   MapPinned,
   Menu,
   MessageCircleHeart,
+  MessageSquareText,
   Sparkles,
   UserRound,
 } from "lucide-react";
@@ -74,6 +75,12 @@ export const productSidebarNav: NavItem[] = [
     label: "Profile",
     description: "Your account and preferences.",
     icon: UserRound,
+  },
+  {
+    href: "/app/feedback",
+    label: "Feedback",
+    description: "Ideas, bugs, and topic requests — stored in InsForge.",
+    icon: MessageSquareText,
   },
 ];
 

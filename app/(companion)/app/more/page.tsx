@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bookmark, BookOpen, MapPinned, Sparkles, UserRound } from "lucide-react";
+import { Bookmark, BookOpen, MapPinned, MessageSquareText, Sparkles, UserRound } from "lucide-react";
 import { ZYRA } from "@/lib/zyra/site";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +34,12 @@ const links = [
     label: "Insights",
     description: "A soft place for patterns when your logs grow over time.",
     icon: Sparkles,
+  },
+  {
+    href: "/app/feedback",
+    label: "Feedback",
+    description: "Tell us what helps — or request a topic for Resources.",
+    icon: MessageSquareText,
   },
 ] as const;
 

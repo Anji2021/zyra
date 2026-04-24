@@ -147,7 +147,7 @@ No new env vars. After pulling changes, run **`npm run dev`** and walk the app o
 
 - [ ] **Layout:** main app content uses a **consistent max width** and vertical rhythm (`AppPageShell` inside the product shell).
 - [ ] **Mobile nav:** five tabs — **Home**, **Cycle**, **Health**, **Assistant**, **More** — with a clear **active** state and smooth transitions.
-- [ ] **More (`/app/more`):** opens **Profile**, **Resources**, **Specialists**, **Saved**, **Insights**; **desktop sidebar** lists the same destinations.
+- [ ] **More (`/app/more`):** opens **Profile**, **Resources**, **Specialists**, **Saved**, **Insights**, **Feedback**; **desktop sidebar** lists the same destinations (including **Feedback**).
 - [ ] **Home (`/app`):** welcome **“Hi, [Name]”**, **quick actions**, **saved specialists** preview (up to 3) or empty line, **at a glance** snapshots, optional **cycle length** note when two periods exist.
 - [ ] **Empty states:** cycle / health / assistant / resources search feel **intentional**, not broken.
 - [ ] **Loading:** route **`loading.tsx`** skeletons appear briefly for **app root**, **cycle**, **health log**, and **assistant** (no flash of empty layout).
@@ -168,3 +168,19 @@ Run **`supabase/migrations/000006_saved_specialists.sql`** in the Supabase SQL e
 - [ ] **Home** shows **Your saved specialists** (up to 3) or *“You haven’t saved any specialists yet”* with a link to search.
 - [ ] **Only my rows** appear (RLS); another user cannot read my saved list.
 - [ ] **Saved** appears in the **desktop sidebar** and under **More** on mobile.
+
+---
+
+# Feedback & topic requests (InsForge `feedback_requests`)
+
+Create **`public.feedback_requests`** using InsForge MCP tool **`run-raw-sql`** with the SQL in **`insforge/migrations/000001_feedback_requests.sql`**, or run that file in the InsForge SQL editor.
+
+Ensure **`NEXT_PUBLIC_INSFORGE_BASE_URL`** and **`NEXT_PUBLIC_INSFORGE_ANON_KEY`** are present (InsForge MCP **`download-template`** / Connect flow writes the same names into **`.env`**). Restart **`npm run dev`** after changes.
+
+## Feedback checklist
+
+- [ ] **`/app/feedback`** loads when signed in (sidebar **Feedback** or **More → Feedback**).
+- [ ] Submitting the form returns success and a new row appears in InsForge **`public.feedback_requests`** with **`source`**, **`type`**, **`title`**, **`message`**, **`email`**, **`created_at`**.
+- [ ] **`POST /api/feedback`** does not use Supabase; only the InsForge SDK.
+- [ ] **503** when InsForge URL/key are missing (API explains InsForge MCP / Connect).
+- [ ] **Supabase** remains used elsewhere for auth, profiles, cycle, health, saved specialists.

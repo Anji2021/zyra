@@ -15,6 +15,7 @@ function navIsActive(pathname: string, href: string): boolean {
       pathname === "/app/specialists" ||
       pathname === "/app/saved" ||
       pathname === "/app/insights" ||
+      pathname === "/app/feedback" ||
       pathname === "/app/resources" ||
       pathname.startsWith("/app/resources/")
     );
