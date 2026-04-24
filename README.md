@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+**Zyra:** Auth, onboarding, and profile checks — see [docs/validation-checklist.md](docs/validation-checklist.md).
+
 ## Getting Started
 
 First, run the development server:
