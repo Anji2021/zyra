@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Zyra">
+  <defs>
+    <linearGradient id="zyra-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbf8f6"/>
+      <stop offset="100%" stop-color="#f0dfe8"/>
+    </linearGradient>
+    <linearGradient id="zyra-moon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c4a4b0"/>
+      <stop offset="100%" stop-color="#a67a88"/>
+    </linearGradient>
+  </defs>
+  <circle cx="16" cy="16" r="15" fill="url(#zyra-bg)" stroke="#ebe4e0" stroke-width="0.5"/>
+  <path
+    fill="url(#zyra-moon)"
+    d="M16 6a9 9 0 0 0-4.2 17 7.5 7.5 0 0 1 0-14.5A9 9 0 0 0 16 6Z"
+    opacity="0.95"
+  />
+  <path
+    fill="#a67a88"
+    d="M11 22c1.8-3.2 3.8-6 6.2-8.2-1.6 2.4-2.8 5.1-3.4 8.2h2.2c.5-2.4 1.4-4.6 2.6-6.6 1.3 2 2.2 4.3 2.6 6.6h2.2c-.8-4.2-2.5-8-5-11.2-2.8 2.6-5.2 5.8-7.4 9.2Z"
+    opacity="0.92"
+  />
+  <circle cx="24" cy="9" r="1.35" fill="#8a9a8c" opacity="0.85"/>
+</svg>

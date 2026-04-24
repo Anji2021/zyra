@@ -16,6 +16,7 @@ type AssistantChatProps = {
 function friendlyErrorForStatus(status: number, serverMessage?: string): string {
   if (status === 401) return serverMessage ?? "Sign in to use the assistant.";
   if (status === 400) return serverMessage ?? "That message could not be sent.";
+  if (status === 429) return serverMessage ?? FRIENDLY_TRY_AGAIN;
   return FRIENDLY_TRY_AGAIN;
 }
 

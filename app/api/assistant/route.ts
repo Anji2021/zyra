@@ -2,8 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import Groq from "groq-sdk";
 import type { ChatCompletionMessageParam } from "groq-sdk/resources/chat/completions";
+import {
+  cachedMessagesToGroqParams,
+  checkAssistantRateLimit,
+  getCachedAssistantMessages,
+  mergeCachedWithNewUserMessage,
+  rateLimitKeyForUser,
+  setCachedAssistantMessages,
+  type CachedAssistantMessage,
+} from "@/lib/assistant/redis-assistant";
 import { ASSISTANT_UNAVAILABLE } from "@/lib/assistant/chat-types";
 import { ZYRA_ASSISTANT_SYSTEM_PROMPT } from "@/lib/assistant/system-prompt";
+import { getRedis } from "@/lib/redis";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 
 const GROQ_MODEL = "llama-3.1-8b-instant";
@@ -26,6 +36,31 @@ function isMessageRow(r: { id: string; role: string; content: string } | null): 
     typeof r.content === "string" &&
     typeof r.id === "string"
   );
+}
+
+async function loadContextFromSupabase(
+  supabase: ReturnType<typeof createServerClient>,
+  userId: string,
+): Promise<ChatCompletionMessageParam[]> {
+  const { data: recentRows, error: recentError } = await supabase
+    .from("messages")
+    .select("id, role, content, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(CONTEXT_MESSAGE_LIMIT);
+
+  if (recentError) {
+    throw new Error(recentError.message);
+  }
+
+  const chronological = [...(recentRows ?? [])].reverse();
+  const messages: ChatCompletionMessageParam[] = [];
+  for (const row of chronological) {
+    if (row.role === "user" || row.role === "assistant") {
+      messages.push({ role: row.role, content: row.content });
+    }
+  }
+  return messages;
 }
 
 export async function POST(request: Request) {
@@ -90,6 +125,14 @@ export async function POST(request: Request) {
       return Response.json({ error: "Message is too long." }, { status: 400 });
     }
 
+    const redis = getRedis();
+    if (redis) {
+      const rl = await checkAssistantRateLimit(redis, rateLimitKeyForUser(user.id));
+      if (!rl.ok) {
+        return Response.json({ error: rl.message }, { status: 429 });
+      }
+    }
+
     const { data: insertedUser, error: insertUserError } = await supabase
       .from("messages")
       .insert({ user_id: user.id, role: "user", content: userMessageText })
@@ -104,24 +147,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: recentRows, error: recentError } = await supabase
-      .from("messages")
-      .select("id, role, content, created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(CONTEXT_MESSAGE_LIMIT);
+    let messages: ChatCompletionMessageParam[];
 
-    if (recentError) {
-      console.error("[api/assistant] load context", recentError.message);
-      return Response.json({ error: ASSISTANT_UNAVAILABLE }, { status: 502 });
-    }
-
-    const chronological = [...(recentRows ?? [])].reverse();
-    const messages: ChatCompletionMessageParam[] = [];
-    for (const row of chronological) {
-      if (row.role === "user" || row.role === "assistant") {
-        messages.push({ role: row.role, content: row.content });
+    if (redis) {
+      try {
+        const cached = await getCachedAssistantMessages(redis, user.id);
+        if (cached && cached.length > 0) {
+          const merged = mergeCachedWithNewUserMessage(cached, insertedUser);
+          const trimmed = merged.slice(-CONTEXT_MESSAGE_LIMIT);
+          messages = cachedMessagesToGroqParams(trimmed);
+        } else {
+          messages = await loadContextFromSupabase(supabase, user.id);
+        }
+      } catch (e) {
+        console.error("[api/assistant] Redis context path failed, using Supabase", e);
+        messages = await loadContextFromSupabase(supabase, user.id);
       }
+    } else {
+      messages = await loadContextFromSupabase(supabase, user.id);
     }
 
     const groq = new Groq({
@@ -179,6 +222,34 @@ export async function POST(request: Request) {
     if (insertAssistantError || !isMessageRow(insertedAssistant)) {
       console.error("[api/assistant] save assistant message", insertAssistantError?.message);
       return Response.json({ error: ASSISTANT_UNAVAILABLE }, { status: 502 });
+    }
+
+    if (redis) {
+      try {
+        const { data: tailRows, error: tailErr } = await supabase
+          .from("messages")
+          .select("id, role, content, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(CONTEXT_MESSAGE_LIMIT);
+
+        if (!tailErr && tailRows?.length) {
+          const chronological = [...tailRows].reverse();
+          const toCache: CachedAssistantMessage[] = [];
+          for (const row of chronological) {
+            if (row.role === "user" || row.role === "assistant") {
+              toCache.push({
+                id: row.id,
+                role: row.role,
+                content: row.content,
+              });
+            }
+          }
+          await setCachedAssistantMessages(redis, user.id, toCache);
+        }
+      } catch (e) {
+        console.error("[api/assistant] Redis memory refresh failed (non-fatal)", e);
+      }
     }
 
     return Response.json({

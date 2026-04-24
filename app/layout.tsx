@@ -21,6 +21,15 @@ export const metadata: Metadata = {
     template: `%s — ${ZYRA.name}`,
   },
   description: ZYRA.description,
+  icons: {
+    icon: [
+      { url: "/zyra-icon.svg", type: "image/svg+xml" },
+      { url: "/zyra-icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/zyra-icon-64.png", sizes: "64x64", type: "image/png" },
+      { url: "/zyra-icon.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/zyra-icon.png", sizes: "512x512", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

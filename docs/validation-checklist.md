@@ -106,6 +106,20 @@ Run **`supabase/migrations/000005_messages.sql`** in the Supabase SQL editor fir
 
 ---
 
+# Redis (optional — assistant memory + rate limit)
+
+Set **`UPSTASH_REDIS_REST_URL`** and **`UPSTASH_REDIS_REST_TOKEN`** (or **`REDIS_URL`** / **`REDIS_TOKEN`** with the same Upstash REST values) in **`.env.local`**. Supabase **`public.messages`** remains the source of truth; Redis only caches recent turns and enforces limits.
+
+## Redis validation checklist
+
+- [ ] **Without Redis env:** assistant still works; context loads from Supabase only; **no** rate limit (Redis-only).
+- [ ] **With Redis env:** assistant responds; **`zyra:assistant:memory:{userId}`** holds up to **10** messages with **24h** TTL after sends.
+- [ ] **More than 10** assistant requests within **10 minutes** returns **429** with *“You've reached the temporary message limit…”* and the UI shows that message.
+- [ ] **Redis errors** (bad key, network): logged server-side; assistant still falls back to Supabase (no hard crash).
+- [ ] **Clear chat** still wipes Supabase rows and **deletes** the Redis memory key when Redis is configured.
+
+---
+
 # Specialists (Google Places)
 
 Add **`GOOGLE_PLACES_API_KEY`** to **`.env.local`** (server-only; never `NEXT_PUBLIC_`). The app calls Google only from **`/api/specialists`** (backend).
