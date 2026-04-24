@@ -56,3 +56,9 @@ next-env.d.ts
 .trae
 .windsurf
 .env.local
+node_modules
+.next
+.turbo
+out
+.env.local
+.env
