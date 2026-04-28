@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { hasProfileRow } from "@/lib/profiles/queries";
+import { isProfileComplete } from "@/lib/profiles/completeness";
+import { getProfileForUser } from "@/lib/profiles/queries";
 import { getSupabasePublicEnv } from "./env";
 
 function copyCookies(from: NextResponse, to: NextResponse) {
@@ -58,27 +59,28 @@ export async function updateSession(request: NextRequest) {
       pathname === "/" || pathname.startsWith("/app") || pathname.startsWith("/onboarding");
 
     if (needsProfileCheck) {
-      const hasProfile = await hasProfileRow(supabase, user.id);
+      const profile = await getProfileForUser(supabase, user.id);
+      const complete = isProfileComplete(profile);
 
-      if (hasProfile && pathname.startsWith("/onboarding")) {
+      if (complete && pathname.startsWith("/onboarding")) {
         const next = NextResponse.redirect(new URL("/app", request.url));
         copyCookies(supabaseResponse, next);
         return next;
       }
 
-      if (!hasProfile && pathname.startsWith("/app")) {
+      if (!complete && pathname.startsWith("/app")) {
         const next = NextResponse.redirect(new URL("/onboarding", request.url));
         copyCookies(supabaseResponse, next);
         return next;
       }
 
-      if (!hasProfile && pathname === "/") {
+      if (!complete && pathname === "/") {
         const next = NextResponse.redirect(new URL("/onboarding", request.url));
         copyCookies(supabaseResponse, next);
         return next;
       }
 
-      if (hasProfile && pathname === "/") {
+      if (complete && pathname === "/") {
         const next = NextResponse.redirect(new URL("/app", request.url));
         copyCookies(supabaseResponse, next);
         return next;

@@ -77,3 +77,69 @@ export async function logPeriod(_prev: LogCycleState, formData: FormData): Promi
   revalidatePath("/app/cycle");
   redirect("/app/cycle?saved=1");
 }
+
+export async function updateCycleEntry(cycleId: string, formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError) logSupabaseError("update getUser", userError);
+  if (!user) redirect("/?auth=required");
+
+  const startRaw = String(formData.get("start_date") ?? "").trim();
+  const endRaw = String(formData.get("end_date") ?? "").trim();
+  const notesRaw = String(formData.get("notes") ?? "").trim();
+
+  if (!startRaw || !isIsoDateOnly(startRaw)) {
+    redirect("/app/cycle?updated=invalid");
+  }
+
+  let end_date: string | null = null;
+  if (endRaw) {
+    if (!isIsoDateOnly(endRaw)) redirect("/app/cycle?updated=invalid");
+    if (endRaw < startRaw) redirect("/app/cycle?updated=invalid");
+    end_date = endRaw;
+  }
+
+  const notes = notesRaw ? notesRaw : null;
+  const { error } = await supabase
+    .from("cycles")
+    .update({
+      start_date: startRaw,
+      end_date,
+      notes,
+    })
+    .eq("id", cycleId)
+    .eq("user_id", user.id);
+  if (error) {
+    logSupabaseError("cycles.update", error);
+    redirect("/app/cycle?updated=error");
+  }
+
+  revalidatePath("/app/cycle");
+  redirect("/app/cycle?updated=1");
+}
+
+export async function deleteCycleEntry(cycleId: string): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError) logSupabaseError("delete getUser", userError);
+  if (!user) redirect("/?auth=required");
+
+  const { error } = await supabase
+    .from("cycles")
+    .delete()
+    .eq("id", cycleId)
+    .eq("user_id", user.id);
+  if (error) {
+    logSupabaseError("cycles.delete", error);
+    redirect("/app/cycle?deleted=error");
+  }
+
+  revalidatePath("/app/cycle");
+  redirect("/app/cycle?deleted=1");
+}

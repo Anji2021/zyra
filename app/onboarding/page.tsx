@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { hasProfileRow } from "@/lib/profiles/queries";
+import { isProfileComplete } from "@/lib/profiles/completeness";
+import { getProfileForUser } from "@/lib/profiles/queries";
 import { createClient } from "@/lib/supabase/server";
 import { ZYRA } from "@/lib/zyra/site";
 import { OnboardingForm } from "./onboarding-form";
@@ -16,8 +17,8 @@ export default async function OnboardingPage() {
     redirect("/?auth=required");
   }
 
-  const exists = await hasProfileRow(supabase, user.id);
-  if (exists) {
+  const existingProfile = await getProfileForUser(supabase, user.id);
+  if (isProfileComplete(existingProfile)) {
     redirect("/app");
   }
 
@@ -43,7 +44,7 @@ export default async function OnboardingPage() {
       </div>
 
       <div className="rounded-3xl border border-border/80 bg-surface/90 p-6 shadow-sm sm:p-8">
-        <OnboardingForm defaultFullName={defaultFullName} />
+        <OnboardingForm defaultFullName={defaultFullName} existingProfile={existingProfile} />
       </div>
     </div>
   );

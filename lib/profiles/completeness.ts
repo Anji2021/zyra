@@ -7,6 +7,26 @@ export type ProfileCompleteness = {
   lastPeriodCaptured: boolean;
 };
 
+export function isProfileComplete(profile: ProfileRow | null): boolean {
+  if (!profile) return false;
+  const hasCycleLength =
+    profile.average_cycle_length != null &&
+    Number.isFinite(profile.average_cycle_length) &&
+    profile.average_cycle_length >= 15 &&
+    profile.average_cycle_length <= 60;
+
+  return Boolean(
+    profile.full_name?.trim() &&
+      profile.age != null &&
+      profile.age >= 13 &&
+      profile.age <= 120 &&
+      profile.location?.trim() &&
+      Boolean(profile.last_period_start) &&
+      profile.cycle_regular !== null &&
+      hasCycleLength,
+  );
+}
+
 /** Warm, human-readable completion — not clinical scoring. */
 export function getProfileCompleteness(profile: ProfileRow | null): ProfileCompleteness {
   if (!profile) {
@@ -22,22 +42,14 @@ export function getProfileCompleteness(profile: ProfileRow | null): ProfileCompl
     { label: "Your name", ok: Boolean(profile.full_name?.trim()) },
     { label: "Age", ok: profile.age != null && profile.age > 0 },
     { label: "Location", ok: Boolean(profile.location?.trim()) },
-    {
-      label: "Health goals",
-      ok: Array.isArray(profile.health_goals) && profile.health_goals.some((g) => g.trim()),
-    },
-    {
-      label: "Health context",
-      ok: Array.isArray(profile.conditions) && profile.conditions.length > 0,
-    },
+    { label: "Last period start", ok: Boolean(profile.last_period_start) },
     { label: "Cycle regularity", ok: profile.cycle_regular !== null },
     {
       label: "Cycle length",
       ok:
-        profile.cycle_regular === true ||
-        (profile.cycle_regular === false &&
-          profile.average_cycle_length != null &&
-          profile.average_cycle_length > 0),
+        profile.average_cycle_length != null &&
+        profile.average_cycle_length >= 15 &&
+        profile.average_cycle_length <= 60,
     },
   ];
 

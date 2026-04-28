@@ -6,12 +6,13 @@ import { formatCycleDate } from "@/lib/cycles/format";
 import { createClient } from "@/lib/supabase/server";
 import { ZYRA } from "@/lib/zyra/site";
 import { PRIVACY_ONLY_YOU } from "@/lib/zyra/user-messages";
+import { CycleHistoryList } from "./cycle-history-list";
 import { LogPeriodForm } from "./log-period-form";
 
 export const dynamic = "force-dynamic";
 
 type CyclePageProps = {
-  searchParams?: Promise<{ saved?: string }>;
+  searchParams?: Promise<{ saved?: string; updated?: string; deleted?: string }>;
 };
 
 export default async function CyclePage({ searchParams }: CyclePageProps) {
@@ -26,6 +27,9 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
 
   const params = searchParams ? await searchParams : {};
   const justSaved = params.saved === "1";
+  const justUpdated = params.updated === "1";
+  const justDeleted = params.deleted === "1";
+  const hasActionError = params.updated === "error" || params.deleted === "error" || params.updated === "invalid";
 
   const cycles = await fetchCyclesForUser(supabase, user.id);
 
@@ -51,6 +55,30 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
           className="rounded-2xl border border-border/70 bg-soft-rose/45 px-4 py-3 text-center text-sm text-foreground"
         >
           Saved. {ZYRA.name} is holding this entry only for you.
+        </div>
+      ) : null}
+      {justUpdated ? (
+        <div
+          role="status"
+          className="rounded-2xl border border-border/70 bg-soft-rose/45 px-4 py-3 text-center text-sm text-foreground"
+        >
+          Updated. Your cycle entry has been saved.
+        </div>
+      ) : null}
+      {justDeleted ? (
+        <div
+          role="status"
+          className="rounded-2xl border border-border/70 bg-soft-rose/45 px-4 py-3 text-center text-sm text-foreground"
+        >
+          Deleted. That cycle entry was removed.
+        </div>
+      ) : null}
+      {hasActionError ? (
+        <div
+          role="alert"
+          className="rounded-2xl border border-red-200/80 bg-red-50 px-4 py-3 text-center text-sm text-red-950"
+        >
+          Something went wrong. Please try again.
         </div>
       ) : null}
 
@@ -92,23 +120,7 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
             </p>
           </div>
         ) : (
-          <ul className="mt-4 space-y-3 sm:mt-6 sm:space-y-4">
-            {cycles.map((c) => (
-              <li
-                key={c.id}
-                className="rounded-xl border border-border/60 bg-background/85 px-3 py-3 sm:rounded-2xl sm:px-5 sm:py-4"
-              >
-                <p className="text-sm font-semibold text-foreground">
-                  {formatCycleDate(c.start_date)}
-                  <span className="mx-2 font-normal text-muted">→</span>
-                  {c.end_date ? formatCycleDate(c.end_date) : <span className="text-muted">still open</span>}
-                </p>
-                {c.notes ? (
-                  <p className="mt-2 text-sm leading-relaxed text-muted">{c.notes}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          <CycleHistoryList cycles={cycles} />
         )}
       </section>
 

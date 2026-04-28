@@ -66,6 +66,32 @@ function daysSinceSymptomLog(loggedDate: string): number {
   return Math.round((today.getTime() - log.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function todayYmd(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function daysUntilDate(isoYmd: string): number {
+  const target = new Date(`${isoYmd}T12:00:00`);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function formatReminderTime(time: string | null): string {
+  if (!time) return "";
+  const [hhRaw, mmRaw] = time.split(":");
+  const hh = Number(hhRaw);
+  const mm = Number(mmRaw);
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return time;
+  const period = hh >= 12 ? "PM" : "AM";
+  const displayHour = hh % 12 === 0 ? 12 : hh % 12;
+  return `${displayHour}:${String(mm).padStart(2, "0")} ${period}`;
+}
+
 export default async function HomePage() {
   const supabase = await createClient();
   const {
@@ -80,11 +106,19 @@ export default async function HomePage() {
   const { percent, missing } = getProfileCompleteness(profile);
   const firstName = firstNameFromProfile(profile?.full_name);
 
-  const [cycles, medicines, symptoms, savedCount] = await Promise.all([
+  const [cycles, medicines, symptoms, savedCount, remindersResult] = await Promise.all([
     fetchCyclesForUser(supabase, user.id, 1),
     fetchMedicinesForUser(supabase, user.id),
-    fetchSymptomsForUser(supabase, user.id, 1),
+    fetchSymptomsForUser(supabase, user.id, 5),
     countSavedSpecialistsForUser(supabase, user.id),
+    supabase
+      .from("reminders")
+      .select("id,title,message,reminder_date,reminder_time,is_active")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .order("reminder_date", { ascending: true })
+      .order("reminder_time", { ascending: true })
+      .limit(20),
   ]);
 
   const lastPeriod = cycles[0];
@@ -96,6 +130,24 @@ export default async function HomePage() {
 
   const activeMedicineCount = medicines.filter((m) => isMedicineActive(m.end_date)).length;
   const latestSymptom = symptoms[0];
+  const reminders = remindersResult.data ?? [];
+  const reminderError = remindersResult.error;
+  if (reminderError) {
+    console.error("[home] reminders.select:", reminderError.message);
+  }
+
+  const today = todayYmd();
+  const hasSymptomToday = symptoms.some((s) => s.logged_date === today);
+  const symptomLoggedWithin3Days = symptoms.some((s) => daysSinceSymptomLog(s.logged_date) <= 3);
+  const nextUpcomingReminder = reminders.find((r) => {
+    if (!r.reminder_date) return false;
+    if (r.reminder_date > today) return true;
+    if (r.reminder_date < today) return false;
+    if (!r.reminder_time) return true;
+    const now = new Date();
+    const current = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    return r.reminder_time.slice(0, 5) >= current;
+  });
 
   const symptomRecentEnough =
     latestSymptom != null && daysSinceSymptomLog(latestSymptom.logged_date) <= 7;
@@ -107,6 +159,55 @@ export default async function HomePage() {
   if (savedCount === 0) {
     nudges.push("You can save specialists you may want to revisit later.");
   }
+  if (reminders.length === 0) {
+    nudges.push("Set reminders so Zyra can support you proactively.");
+  }
+  if (!symptomLoggedWithin3Days) {
+    nudges.unshift("You haven’t logged symptoms recently — want to check in?");
+  }
+  const visibleNudges = nudges.slice(0, 2);
+  const nextPeriodDaysAway = nextPeriodEstimate ? daysUntilDate(nextPeriodEstimate) : null;
+  const featureCards = [
+    {
+      title: "Track your cycle",
+      description: "Log start and end dates to keep a gentle cycle history.",
+      href: "/app/cycle",
+    },
+    {
+      title: "Log symptoms & medicines",
+      description: "Capture how you feel and what you’re taking in one place.",
+      href: "/app/health-log",
+    },
+    {
+      title: "Understand insights",
+      description: "See simple pattern summaries from your own logs.",
+      href: "/app/insights",
+    },
+    {
+      title: "Ask Zyra",
+      description: "Get supportive, educational guidance when you need it.",
+      href: "/app/assistant",
+    },
+    {
+      title: "Find specialists",
+      description: "Discover and save specialists you may want to revisit.",
+      href: "/app/specialists",
+    },
+    {
+      title: "Set reminders",
+      description: "Stay on track with gentle reminder prompts.",
+      href: "/app/reminders",
+    },
+  ] as const;
+
+  const recommendedNextStep =
+    cycles.length === 0
+      ? { label: "Log your first period", href: "/app/cycle" }
+      : symptoms.length === 0
+        ? { label: "Log how you’re feeling", href: "/app/health-log" }
+        : reminders.length === 0
+          ? { label: "Set a reminder", href: "/app/reminders" }
+          : { label: "Ask Zyra about your recent patterns", href: "/app/assistant" };
 
   return (
     <div className="space-y-5 sm:space-y-10">
@@ -114,11 +215,13 @@ export default async function HomePage() {
       <section className="rounded-2xl border border-border/70 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-8">
         <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">Home</p>
         <h1 className="mt-1.5 font-serif text-2xl font-semibold tracking-tight text-foreground sm:mt-2 sm:text-4xl">
-          Hi {firstName}
+          Hi {firstName}, welcome to Zyra
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
-          Here&apos;s a gentle snapshot of your health journey.
+          Zyra helps you track your cycle, log symptoms, understand health patterns, ask questions,
+          find specialists, and set reminders.
         </p>
+        <p className="mt-2 text-sm text-foreground">You&apos;re doing great. Zyra is here to support you.</p>
         {percent < 100 && missing.length > 0 ? (
           <p className="mt-4 text-xs leading-relaxed text-muted">
             When you have a moment, you can round out your profile from{" "}
@@ -128,6 +231,29 @@ export default async function HomePage() {
             .
           </p>
         ) : null}
+      </section>
+
+      <section aria-labelledby="what-you-can-do-heading">
+        <h2
+          id="what-you-can-do-heading"
+          className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs"
+        >
+          What you can do here
+        </h2>
+        <ul className="mt-3 grid gap-3 sm:mt-4 sm:gap-4 lg:grid-cols-2">
+          {featureCards.map((card) => (
+            <li key={card.title} className="rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm">
+              <p className="font-medium text-foreground">{card.title}</p>
+              <p className="mt-1 text-sm text-muted">{card.description}</p>
+              <Link
+                href={card.href}
+                className="mt-3 inline-flex h-9 items-center justify-center rounded-full border border-border bg-surface px-4 text-xs font-semibold text-accent transition hover:border-accent/40 sm:text-sm"
+              >
+                Open
+              </Link>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* B. Today’s insight — cycle */}
@@ -152,27 +278,146 @@ export default async function HomePage() {
             </p>
             {nextPeriodEstimate ? (
               <p>
-                <span className="font-medium text-foreground">Rough next period around </span>
-                <span className="font-serif font-semibold text-foreground">
-                  {formatCycleDate(nextPeriodEstimate)}
-                </span>
-                {cycleLengthSource === "profile" ? (
-                  <span className="text-muted"> (using your average cycle length).</span>
+                {nextPeriodDaysAway != null && nextPeriodDaysAway <= 3 ? (
+                  <>
+                    <span className="font-medium text-foreground">Your period may start soon.</span>
+                    <span className="text-muted"> Keep your essentials and comfort plan nearby.</span>
+                  </>
                 ) : (
-                  <span className="text-muted"> (using a simple ~28 day estimate).</span>
+                  <>
+                    <span className="font-medium text-foreground">Your next period may be in </span>
+                    <span className="font-serif font-semibold text-foreground">
+                      {Math.max(0, nextPeriodDaysAway ?? 0)} days
+                    </span>
+                    <span className="text-muted">.</span>
+                  </>
                 )}
               </p>
             ) : null}
+            {nextPeriodEstimate ? (
+              <p className="text-xs text-muted">
+                Estimated around {formatCycleDate(nextPeriodEstimate)}{" "}
+                {cycleLengthSource === "profile" ? "(using your average cycle length)." : "(using ~28 days)."}
+              </p>
+            ) : null}
             <p className="text-xs leading-relaxed text-muted sm:text-sm">
-              This is a soft calendar hint, not a prediction or medical advice. Bodies vary week to
-              week.
+              Let’s check in together. This is a soft calendar hint, not a prediction or medical advice.
             </p>
           </div>
         ) : (
           <p className="mt-4 text-sm leading-relaxed text-muted sm:text-base">
-            Log your first period to start seeing cycle insights.
+            Log your cycle to start seeing insights.
           </p>
         )}
+      </section>
+
+      <section className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+        <article className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm sm:rounded-3xl sm:p-6">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">
+            Today&apos;s check-in
+          </h2>
+          {!hasSymptomToday ? (
+            <div className="mt-3 space-y-3">
+              <p className="text-sm text-foreground">How are you feeling today?</p>
+              <Link
+                href="/app/health-log"
+                className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-surface px-4 text-xs font-semibold text-accent transition hover:border-accent/40 sm:text-sm"
+              >
+                Log symptom
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-foreground">
+              You&apos;ve logged your symptoms today - great job. You&apos;re doing great.
+            </p>
+          )}
+        </article>
+
+        <article className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm sm:rounded-3xl sm:p-6">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">
+            Upcoming reminder
+          </h2>
+          {nextUpcomingReminder ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-sm text-foreground">
+                Next reminder: {nextUpcomingReminder.title}
+                {nextUpcomingReminder.reminder_time
+                  ? ` at ${formatReminderTime(nextUpcomingReminder.reminder_time)}`
+                  : ""}
+              </p>
+              <p className="text-xs text-muted">
+                {nextUpcomingReminder.reminder_date
+                  ? `Scheduled for ${formatCycleDate(nextUpcomingReminder.reminder_date)}`
+                  : "Scheduled soon"}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              <p className="text-sm text-muted">Set reminders to stay on track.</p>
+              <Link
+                href="/app/reminders"
+                className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-surface px-4 text-xs font-semibold text-accent transition hover:border-accent/40 sm:text-sm"
+              >
+                Set reminders
+              </Link>
+            </div>
+          )}
+        </article>
+      </section>
+
+      <section
+        aria-labelledby="snapshot-heading"
+        className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm sm:rounded-3xl sm:p-7"
+      >
+        <h2
+          id="snapshot-heading"
+          className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs"
+        >
+          Today&apos;s snapshot
+        </h2>
+        <ul className="mt-3 space-y-3 text-sm leading-relaxed sm:mt-5 sm:space-y-4">
+          <li className="flex flex-col gap-1 border-b border-border/50 pb-3 sm:flex-row sm:items-baseline sm:justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Next period estimate</span>
+            <span className="text-foreground">
+              {nextPeriodEstimate
+                ? `${formatCycleDate(nextPeriodEstimate)}${nextPeriodDaysAway != null ? ` (${Math.max(0, nextPeriodDaysAway)} days)` : ""}`
+                : "Add cycle entries to unlock this"}
+            </span>
+          </li>
+          <li className="flex flex-col gap-1 border-b border-border/50 pb-3 sm:flex-row sm:items-baseline sm:justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Latest symptom</span>
+            <span className="text-foreground">
+              {latestSymptom
+                ? `${latestSymptom.symptom} · ${formatCycleDate(latestSymptom.logged_date)}`
+                : "No symptom logged yet"}
+            </span>
+          </li>
+          <li className="flex flex-col gap-1 border-b border-border/50 pb-3 sm:flex-row sm:items-baseline sm:justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Upcoming reminder</span>
+            <span className="text-foreground">
+              {nextUpcomingReminder
+                ? `${nextUpcomingReminder.title}${nextUpcomingReminder.reminder_time ? ` · ${formatReminderTime(nextUpcomingReminder.reminder_time)}` : ""}`
+                : "No active reminder yet"}
+            </span>
+          </li>
+          <li className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Saved specialists</span>
+            <span className="font-medium text-foreground">{savedCount}</span>
+          </li>
+        </ul>
+      </section>
+
+      <section className="rounded-2xl border border-border/70 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-7">
+        <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">
+          Recommended next step
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-foreground">Let&apos;s check in: {recommendedNextStep.label}</p>
+        <Link
+          href={recommendedNextStep.href}
+          className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-accent-foreground shadow-sm transition hover:opacity-90"
+        >
+          Continue
+        </Link>
       </section>
 
       {/* C. Quick action cards */}
@@ -233,11 +478,11 @@ export default async function HomePage() {
 
       {/* D. Recent activity snapshot */}
       <section
-        aria-labelledby="snapshot-heading"
+        aria-labelledby="recent-activity-heading"
         className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm sm:rounded-3xl sm:p-7"
       >
         <h2
-          id="snapshot-heading"
+          id="recent-activity-heading"
           className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs"
         >
           Recent activity
@@ -302,13 +547,13 @@ export default async function HomePage() {
       </section>
 
       {/* E. Gentle nudge */}
-      {nudges.length > 0 ? (
+      {visibleNudges.length > 0 ? (
         <section
           aria-label="Suggestions"
           className="rounded-xl border border-dashed border-border/80 bg-surface/60 px-4 py-3 sm:rounded-2xl sm:px-6 sm:py-4"
         >
           <ul className="space-y-2 text-sm leading-relaxed text-muted">
-            {nudges.map((text) => (
+            {visibleNudges.map((text) => (
               <li key={text} className="flex gap-2">
                 <span className="shrink-0 text-accent" aria-hidden>
                   ·
@@ -325,7 +570,7 @@ export default async function HomePage() {
       </p>
 
       <p className="text-center text-xs leading-relaxed text-muted">
-        {ZYRA.name} is a companion, not a clinician.{" "}
+        Zyra is here to support you. {ZYRA.name} is a companion, not a clinician.{" "}
         <Link href="/app/more" className="font-semibold text-accent underline-offset-2 hover:underline">
           More
         </Link>{" "}

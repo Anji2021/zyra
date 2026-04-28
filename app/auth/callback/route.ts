@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { hasProfileRow } from "@/lib/profiles/queries";
+import { isProfileComplete } from "@/lib/profiles/completeness";
+import { getProfileForUser } from "@/lib/profiles/queries";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 
 export const dynamic = "force-dynamic";
@@ -98,8 +99,8 @@ export async function GET(request: NextRequest) {
 
   let destinationPath: string;
   try {
-    const hasProfile = await hasProfileRow(supabase, user.id);
-    destinationPath = hasProfile ? "/app" : "/onboarding";
+    const profile = await getProfileForUser(supabase, user.id);
+    destinationPath = isProfileComplete(profile) ? "/app" : "/onboarding";
   } catch (e) {
     console.error("[auth/callback] Profile lookup failed:", e);
     destinationPath = "/onboarding";
