@@ -11,6 +11,7 @@ function navIsActive(pathname: string, href: string): boolean {
   if (href === "/app/more") {
     return (
       pathname === "/app/more" ||
+      pathname === "/app/reminders" ||
       pathname === "/app/specialists" ||
       pathname === "/app/saved" ||
       pathname === "/app/insights" ||

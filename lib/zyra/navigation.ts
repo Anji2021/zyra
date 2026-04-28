@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BellRing,
   Bookmark,
   BookOpen,
   CalendarHeart,
@@ -55,6 +56,12 @@ export const productSidebarNav: NavItem[] = [
     label: "Insights",
     description: "Gentle summaries when you have enough logged to notice patterns.",
     icon: Sparkles,
+  },
+  {
+    href: "/app/reminders",
+    label: "Reminders",
+    description: "Personal reminders for cycle, medicines, and check-ins.",
+    icon: BellRing,
   },
   {
     href: "/app/specialists",

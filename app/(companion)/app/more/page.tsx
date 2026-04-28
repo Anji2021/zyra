@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bookmark, BookOpen, MapPinned, Sparkles } from "lucide-react";
+import { BellRing, Bookmark, BookOpen, MapPinned, Sparkles } from "lucide-react";
 import { ZYRA } from "@/lib/zyra/site";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +10,12 @@ const links = [
     label: "Resources",
     description: "Short reads for clarity before or after a visit.",
     icon: BookOpen,
+  },
+  {
+    href: "/app/reminders",
+    label: "Reminders",
+    description: "Private reminders for medicine, cycle, and check-ins.",
+    icon: BellRing,
   },
   {
     href: "/app/specialists",
