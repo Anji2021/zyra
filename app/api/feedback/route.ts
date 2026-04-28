@@ -1,172 +1,89 @@
-import { getInsforgeServerClient } from "@/lib/insforge/server-client";
-import { FRIENDLY_TRY_AGAIN } from "@/lib/zyra/user-messages";
+import { createClient } from "@/lib/supabase/server";
+import { getSupabasePublicEnv } from "@/lib/supabase/env";
+import { isFeedbackType } from "@/lib/feedback/types";
 
 export const runtime = "nodejs";
 
-const MAX_TITLE = 200;
-const MAX_MESSAGE = 8000;
-const MAX_EMAIL = 320;
-const ALLOWED_TYPES = new Set(["feedback", "topic_request"]);
-const FEEDBACK_TABLE = "feedback_requests" as const;
-
-const isDev = process.env.NODE_ENV === "development";
-
-function logEnvDiagnostics() {
-  const hasPublicBase = Boolean(process.env.NEXT_PUBLIC_INSFORGE_BASE_URL?.trim());
-  const hasPublicAnon = Boolean(process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY?.trim());
-  const hasLegacyBase = Boolean(process.env.INSFORGE_BASE_URL?.trim());
-  const hasLegacyService = Boolean(process.env.INSFORGE_SERVICE_KEY?.trim());
-  const hasLegacyAnon = Boolean(process.env.INSFORGE_ANON_KEY?.trim());
-
-  console.info("[api/feedback] InsForge env (presence only, no secret values)", {
-    NEXT_PUBLIC_INSFORGE_BASE_URL: hasPublicBase,
-    NEXT_PUBLIC_INSFORGE_ANON_KEY: hasPublicAnon,
-    INSFORGE_BASE_URL_legacy: hasLegacyBase,
-    INSFORGE_SERVICE_KEY_legacy: hasLegacyService,
-    INSFORGE_ANON_KEY_legacy: hasLegacyAnon,
-  });
-}
-
-/** Safe JSON for logs: PostgREST / InsForge DB errors. */
-function serializeInsforgeDbError(error: unknown): Record<string, unknown> {
-  if (!error || typeof error !== "object") {
-    return { raw: String(error) };
-  }
-  const e = error as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  for (const k of ["message", "code", "details", "hint", "name"] as const) {
-    if (e[k] !== undefined) out[k] = e[k];
-  }
-  if (Object.keys(out).length === 0) {
-    try {
-      return { json: JSON.parse(JSON.stringify(error)) };
-    } catch {
-      return { stringified: String(error) };
-    }
-  }
-  return out;
-}
-
-function devDbErrorMessage(error: unknown): string {
-  const s = serializeInsforgeDbError(error);
-  const parts = [
-    typeof s.message === "string" ? s.message : null,
-    typeof s.code === "string" ? `code=${s.code}` : null,
-    typeof s.details === "string" && s.details ? `details=${s.details}` : null,
-    typeof s.hint === "string" && s.hint ? `hint=${s.hint}` : null,
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" | ") : FRIENDLY_TRY_AGAIN;
-}
+const TITLE_MAX = 200;
+const MESSAGE_MAX = 8000;
+const EMAIL_MAX = 320;
 
 export async function POST(request: Request) {
-  logEnvDiagnostics();
+  const { isConfigured } = getSupabasePublicEnv();
+  if (!isConfigured) {
+    return Response.json(
+      { error: "Zyra isn’t fully configured right now. Try again later." },
+      { status: 503 },
+    );
+  }
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return Response.json({ error: "Sign in to send feedback." }, { status: 401 });
+  }
+
+  let body: unknown;
   try {
-    const client = getInsforgeServerClient();
-    if (!client) {
-      const msg =
-        "InsForge client could not be built: set NEXT_PUBLIC_INSFORGE_BASE_URL and NEXT_PUBLIC_INSFORGE_ANON_KEY (or legacy INSFORGE_* fallbacks).";
-      console.error("[api/feedback]", msg);
-      return Response.json(
-        { success: false, error: isDev ? msg : FRIENDLY_TRY_AGAIN },
-        { status: 503 },
-      );
-    }
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid request body." }, { status: 400 });
+  }
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return Response.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
-    }
+  if (!body || typeof body !== "object") {
+    return Response.json({ error: "Invalid request body." }, { status: 400 });
+  }
 
-    if (typeof body !== "object" || body === null) {
-      return Response.json({ success: false, error: "Invalid body." }, { status: 400 });
-    }
+  const { type, title, message, email } = body as Record<string, unknown>;
 
-    const b = body as {
-      source?: unknown;
-      type?: unknown;
-      title?: unknown;
-      message?: unknown;
-      email?: unknown;
-    };
+  if (typeof type !== "string" || !isFeedbackType(type)) {
+    return Response.json({ error: "Choose a valid feedback type." }, { status: 400 });
+  }
 
-    const type = String(b.type ?? "").trim();
-    if (!ALLOWED_TYPES.has(type)) {
-      return Response.json({ success: false, error: "Invalid type." }, { status: 400 });
-    }
+  if (typeof title !== "string" || !title.trim()) {
+    return Response.json({ error: "Add a short title." }, { status: 400 });
+  }
 
-    const title = String(b.title ?? "").trim();
-    const message = String(b.message ?? "").trim();
-    if (!title) {
-      return Response.json({ success: false, error: "Title is required." }, { status: 400 });
-    }
-    if (!message) {
-      return Response.json({ success: false, error: "Message is required." }, { status: 400 });
-    }
-    if (title.length > MAX_TITLE) {
-      return Response.json({ success: false, error: "Title is too long." }, { status: 400 });
-    }
-    if (message.length > MAX_MESSAGE) {
-      return Response.json({ success: false, error: "Message is too long." }, { status: 400 });
-    }
+  if (typeof message !== "string" || !message.trim()) {
+    return Response.json({ error: "Add a message." }, { status: 400 });
+  }
 
-    const sourceRaw = String(b.source ?? "zyra_app").trim();
-    const source = sourceRaw.slice(0, 64) || "zyra_app";
+  const titleTrim = title.trim().slice(0, TITLE_MAX);
+  const messageTrim = message.trim().slice(0, MESSAGE_MAX);
 
-    const email = String(b.email ?? "").trim();
-    if (email.length > MAX_EMAIL) {
-      return Response.json({ success: false, error: "Email is too long." }, { status: 400 });
+  let emailOut: string | null = null;
+  if (email != null && email !== "") {
+    if (typeof email !== "string") {
+      return Response.json({ error: "Email must be text if provided." }, { status: 400 });
     }
+    emailOut = email.trim().slice(0, EMAIL_MAX) || null;
+  }
 
-    const created_at = new Date().toISOString();
-    const row = {
-      source,
+  const { data, error } = await supabase
+    .from("feedback_requests")
+    .insert({
+      user_id: user.id,
       type,
-      title,
-      message,
-      email: email.length > 0 ? email : null,
-      created_at,
-    };
+      title: titleTrim,
+      message: messageTrim,
+      email: emailOut,
+    })
+    .select("id")
+    .single();
 
-    console.info("[api/feedback] InsForge insert attempt", {
-      table: FEEDBACK_TABLE,
-      payload: row,
-    });
-
-    const { data, error } = await client.database
-      .from(FEEDBACK_TABLE)
-      .insert([row])
-      .select("id")
-      .single();
-
-    if (error) {
-      console.error("[api/feedback] InsForge insert failed", {
-        table: FEEDBACK_TABLE,
-        insforgeError: serializeInsforgeDbError(error),
-        payload: row,
-      });
-      return Response.json(
-        { success: false, error: isDev ? devDbErrorMessage(error) : FRIENDLY_TRY_AGAIN },
-        { status: 502 },
-      );
-    }
-
-    console.info("[api/feedback] InsForge insert ok", { id: data?.id ?? null });
-    return Response.json({ success: true, id: data?.id ?? null });
-  } catch (e) {
-    const serialized =
-      e instanceof Error
-        ? { name: e.name, message: e.message, stack: isDev ? e.stack : undefined }
-        : serializeInsforgeDbError(e);
-    console.error("[api/feedback] unexpected error", serialized);
+  if (error) {
+    console.error("[feedback] insert error:", error.message);
     return Response.json(
       {
-        success: false,
-        error: isDev && e instanceof Error ? e.message : FRIENDLY_TRY_AGAIN,
+        error:
+          "We couldn’t save your feedback just now. Check your connection and try again in a moment.",
       },
       { status: 500 },
     );
   }
+
+  return Response.json({ id: data?.id ?? null });
 }

@@ -1,8 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { deleteAssistantMemory } from "@/lib/assistant/redis-assistant";
-import { getRedis } from "@/lib/redis";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 
 export const runtime = "nodejs";
@@ -48,11 +46,6 @@ export async function DELETE() {
   if (error) {
     console.error("[api/assistant/clear] delete", error.message);
     return NextResponse.json({ error: "Could not clear chat. Please try again." }, { status: 500 });
-  }
-
-  const redis = getRedis();
-  if (redis) {
-    await deleteAssistantMemory(redis, user.id);
   }
 
   return NextResponse.json({ ok: true });

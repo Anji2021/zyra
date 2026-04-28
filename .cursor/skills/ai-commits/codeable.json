@@ -1,0 +1,20 @@
+{
+  "version": "0.1.2",
+  "keywords": [
+    "git",
+    "commit",
+    "gitmoji",
+    "ai"
+  ],
+  "categories": [
+    "developer-tools",
+    "git"
+  ],
+  "repository": "https://github.com/Chippers255/ai-commits",
+  "agents": [
+    "claude-code",
+    "cursor",
+    "codex",
+    "gemini-cli"
+  ]
+}

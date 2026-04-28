@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -29,15 +29,19 @@ export function SignOutButton() {
       type="button"
       onClick={handleSignOut}
       disabled={loading || !isConfigured}
-      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-soft-rose/40 disabled:cursor-not-allowed disabled:opacity-50"
+      aria-label={loading ? "Signing out" : "Log out"}
+      className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-soft-rose/40 disabled:cursor-not-allowed disabled:opacity-50 min-[380px]:px-3"
     >
       {loading ? (
         <>
-          <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          Signing out…
+          <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+          <span className="hidden min-[380px]:inline">Signing out…</span>
         </>
       ) : (
-        "Log out"
+        <>
+          <LogOut className="size-3.5 shrink-0 min-[380px]:hidden" aria-hidden />
+          <span className="hidden min-[380px]:inline">Log out</span>
+        </>
       )}
     </button>
   );

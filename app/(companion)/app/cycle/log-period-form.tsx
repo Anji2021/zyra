@@ -11,7 +11,7 @@ export function LogPeriodForm() {
   }, [state.error]);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-4 sm:space-y-5">
       <div className="space-y-2">
         <label className="text-sm font-semibold text-foreground" htmlFor="cycle-start">
           Start date

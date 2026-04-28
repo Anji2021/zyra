@@ -8,9 +8,7 @@ import {
   MapPinned,
   Menu,
   MessageCircleHeart,
-  MessageSquareText,
   Sparkles,
-  UserRound,
 } from "lucide-react";
 
 export type NavItem = {
@@ -70,21 +68,9 @@ export const productSidebarNav: NavItem[] = [
     description: "Specialists you bookmarked from search — private to you.",
     icon: Bookmark,
   },
-  {
-    href: "/app/profile",
-    label: "Profile",
-    description: "Your account and preferences.",
-    icon: UserRound,
-  },
-  {
-    href: "/app/feedback",
-    label: "Feedback",
-    description: "Ideas, bugs, and topic requests — stored in InsForge.",
-    icon: MessageSquareText,
-  },
 ];
 
-/** Mobile bottom bar — five tabs; Resources, Specialists, Profile live under More. */
+/** Mobile bottom bar — five tabs; secondary links are under More/profile menu. */
 export const productMobileNav: NavItem[] = [
   {
     href: "/app",
@@ -113,7 +99,7 @@ export const productMobileNav: NavItem[] = [
   {
     href: "/app/more",
     label: "More",
-    description: "Resources, specialists, and profile",
+    description: "Resources, specialists, saved, and insights",
     icon: Menu,
   },
 ];

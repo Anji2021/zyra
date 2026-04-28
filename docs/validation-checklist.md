@@ -106,20 +106,6 @@ Run **`supabase/migrations/000005_messages.sql`** in the Supabase SQL editor fir
 
 ---
 
-# Redis (optional — assistant memory + rate limit)
-
-Set **`UPSTASH_REDIS_REST_URL`** and **`UPSTASH_REDIS_REST_TOKEN`** (or **`REDIS_URL`** / **`REDIS_TOKEN`** with the same Upstash REST values) in **`.env.local`**. Supabase **`public.messages`** remains the source of truth; Redis only caches recent turns and enforces limits.
-
-## Redis validation checklist
-
-- [ ] **Without Redis env:** assistant still works; context loads from Supabase only; **no** rate limit (Redis-only).
-- [ ] **With Redis env:** assistant responds; **`zyra:assistant:memory:{userId}`** holds up to **10** messages with **24h** TTL after sends.
-- [ ] **More than 10** assistant requests within **10 minutes** returns **429** with *“You've reached the temporary message limit…”* and the UI shows that message.
-- [ ] **Redis errors** (bad key, network): logged server-side; assistant still falls back to Supabase (no hard crash).
-- [ ] **Clear chat** still wipes Supabase rows and **deletes** the Redis memory key when Redis is configured.
-
----
-
 # Specialists (Google Places)
 
 Add **`GOOGLE_PLACES_API_KEY`** to **`.env.local`** (server-only; never `NEXT_PUBLIC_`). The app calls Google only from **`/api/specialists`** (backend).
@@ -137,22 +123,6 @@ Enable **Places API** (and billing if required) on the same Google Cloud project
 
 ---
 
-# Tinyfish clinic enrichment (sponsor)
-
-Add **`TINYFISH_API_KEY`** to **`.env.local`** (server-only; never `NEXT_PUBLIC_`). Optional: enrichment is skipped gracefully if the key is missing or Tinyfish errors.
-
-Search results include **`website`** when Google Place Details returns it (server-side). **`POST /api/specialists/enrich`** uses the **Tinyfish Agent** API to summarize the public site.
-
-## Tinyfish enrichment checklist
-
-- [ ] **`TINYFISH_API_KEY`** is never referenced from client bundles.
-- [ ] Specialist cards show **Analyze clinic website**; loading text **“Zyra is checking the clinic website…”** appears while the request runs.
-- [ ] If **no website** (and none from Place Details by `place_id`), the friendly **no website** message appears (not a crash).
-- [ ] If Tinyfish **fails**, the user sees **“Zyra could not analyze this website right now. Please try again later.”** and the app does not crash.
-- [ ] **Google Places search** and **saved specialists** still behave as before.
-
----
-
 # Companion UX polish (layout, nav, home)
 
 No new env vars. After pulling changes, run **`npm run dev`** and walk the app on a **narrow viewport** first.
@@ -161,7 +131,7 @@ No new env vars. After pulling changes, run **`npm run dev`** and walk the app o
 
 - [ ] **Layout:** main app content uses a **consistent max width** and vertical rhythm (`AppPageShell` inside the product shell).
 - [ ] **Mobile nav:** five tabs — **Home**, **Cycle**, **Health**, **Assistant**, **More** — with a clear **active** state and smooth transitions.
-- [ ] **More (`/app/more`):** opens **Profile**, **Resources**, **Specialists**, **Saved**, **Insights**, **Feedback**; **desktop sidebar** lists the same destinations (including **Feedback**).
+- [ ] **More (`/app/more`):** opens **Profile**, **Resources**, **Specialists**, **Saved**, **Insights**; **desktop sidebar** lists the same destinations.
 - [ ] **Home (`/app`):** welcome **“Hi, [Name]”**, **quick actions**, **saved specialists** preview (up to 3) or empty line, **at a glance** snapshots, optional **cycle length** note when two periods exist.
 - [ ] **Empty states:** cycle / health / assistant / resources search feel **intentional**, not broken.
 - [ ] **Loading:** route **`loading.tsx`** skeletons appear briefly for **app root**, **cycle**, **health log**, and **assistant** (no flash of empty layout).
@@ -185,16 +155,3 @@ Run **`supabase/migrations/000006_saved_specialists.sql`** in the Supabase SQL e
 
 ---
 
-# Feedback & topic requests (InsForge `feedback_requests`)
-
-Create **`public.feedback_requests`** using InsForge MCP tool **`run-raw-sql`** with the SQL in **`insforge/migrations/000001_feedback_requests.sql`**, or run that file in the InsForge SQL editor.
-
-Ensure **`NEXT_PUBLIC_INSFORGE_BASE_URL`** and **`NEXT_PUBLIC_INSFORGE_ANON_KEY`** are present (InsForge MCP **`download-template`** / Connect flow writes the same names into **`.env`**). Restart **`npm run dev`** after changes.
-
-## Feedback checklist
-
-- [ ] **`/app/feedback`** loads when signed in (sidebar **Feedback** or **More → Feedback**).
-- [ ] Submitting the form returns success and a new row appears in InsForge **`public.feedback_requests`** with **`source`**, **`type`**, **`title`**, **`message`**, **`email`**, **`created_at`**.
-- [ ] **`POST /api/feedback`** does not use Supabase; only the InsForge SDK.
-- [ ] **503** when InsForge URL/key are missing (API explains InsForge MCP / Connect).
-- [ ] **Supabase** remains used elsewhere for auth, profiles, cycle, health, saved specialists.

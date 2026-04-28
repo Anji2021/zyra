@@ -4,12 +4,19 @@ import type { CycleRow } from "./types";
 export async function fetchCyclesForUser(
   supabase: SupabaseClient,
   userId: string,
+  limit?: number,
 ): Promise<CycleRow[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from("cycles")
     .select("id,user_id,start_date,end_date,notes,created_at")
     .eq("user_id", userId)
     .order("start_date", { ascending: false });
+
+  if (typeof limit === "number") {
+    q = q.limit(limit);
+  }
+
+  const { data, error } = await q;
 
   if (error) {
     console.error("[cycles] fetchCyclesForUser", error.message, error);

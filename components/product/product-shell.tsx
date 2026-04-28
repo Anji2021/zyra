@@ -11,11 +11,9 @@ function navIsActive(pathname: string, href: string): boolean {
   if (href === "/app/more") {
     return (
       pathname === "/app/more" ||
-      pathname === "/app/profile" ||
       pathname === "/app/specialists" ||
       pathname === "/app/saved" ||
       pathname === "/app/insights" ||
-      pathname === "/app/feedback" ||
       pathname === "/app/resources" ||
       pathname.startsWith("/app/resources/")
     );
@@ -87,17 +85,17 @@ export function ProductShell({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="relative flex-1 overflow-y-auto px-4 py-5 pb-28 sm:px-6 sm:py-8 lg:pb-10">
+          <main className="relative flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-8 max-lg:pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10">
             <AppPageShell>{children}</AppPageShell>
           </main>
         </div>
       </div>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-border/80 bg-surface/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-4px_24px_-8px_rgba(42,38,44,0.08)] backdrop-blur-md lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-border/80 bg-surface/95 px-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-4px_20px_-10px_rgba(42,38,44,0.07)] backdrop-blur-md lg:hidden"
         aria-label="Primary"
       >
-        <ul className="mx-auto flex max-w-lg items-end justify-between gap-1">
+        <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-0.5">
           {productMobileNav.map((item) => {
             const active = navIsActive(pathname, item.href);
             const Icon = item.icon;
@@ -105,20 +103,25 @@ export function ProductShell({
               <li key={item.href} className="min-w-0 flex-1">
                 <Link
                   href={item.href}
-                  className={`flex flex-col items-center gap-1 rounded-2xl px-1 py-1.5 text-[10px] font-semibold tracking-tight transition-colors duration-200 ease-out ${
+                  aria-current={active ? "page" : undefined}
+                  className={`flex h-full min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1 text-[10px] font-semibold leading-none tracking-tight transition-colors duration-200 ease-out ${
                     active
                       ? "text-accent"
                       : "text-muted hover:text-foreground/90"
                   }`}
                 >
                   <span
-                    className={`flex size-10 items-center justify-center rounded-2xl transition-colors duration-200 ease-out ${
-                      active ? "bg-soft-rose/90 text-accent shadow-sm" : "bg-transparent"
+                    className={`flex size-9 items-center justify-center rounded-xl transition-colors duration-200 ease-out ${
+                      active
+                        ? "bg-soft-rose/95 text-accent shadow-sm ring-1 ring-accent/25"
+                        : "bg-transparent"
                     }`}
                   >
-                    <Icon className="size-[1.15rem] shrink-0" aria-hidden />
+                    <Icon className="size-[1.05rem] shrink-0" aria-hidden />
                   </span>
-                  <span className="max-w-full truncate">{item.label}</span>
+                  <span className={`max-w-full truncate px-0.5 ${active ? "font-bold text-accent" : ""}`}>
+                    {item.label}
+                  </span>
                 </Link>
               </li>
             );

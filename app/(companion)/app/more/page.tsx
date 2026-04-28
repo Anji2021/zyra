@@ -1,16 +1,10 @@
 import Link from "next/link";
-import { Bookmark, BookOpen, MapPinned, MessageSquareText, Sparkles, UserRound } from "lucide-react";
+import { Bookmark, BookOpen, MapPinned, Sparkles } from "lucide-react";
 import { ZYRA } from "@/lib/zyra/site";
 
 export const dynamic = "force-dynamic";
 
 const links = [
-  {
-    href: "/app/profile",
-    label: "Profile",
-    description: "Your name, goals, and account — update when life shifts.",
-    icon: UserRound,
-  },
   {
     href: "/app/resources",
     label: "Resources",
@@ -35,45 +29,43 @@ const links = [
     description: "A soft place for patterns when your logs grow over time.",
     icon: Sparkles,
   },
-  {
-    href: "/app/feedback",
-    label: "Feedback",
-    description: "Tell us what helps — or request a topic for Resources.",
-    icon: MessageSquareText,
-  },
 ] as const;
 
 export default function MorePage() {
   return (
-    <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">More</p>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+    <div className="space-y-5 sm:space-y-8">
+      <header className="space-y-1.5 sm:space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">More</p>
+        <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-4xl">
           Everything else
         </h1>
-        <p className="max-w-xl text-sm leading-relaxed text-muted">
-          A little room for reading, finding care, and your account — without crowding the main
-          tabs.
+        <p className="max-w-xl text-sm leading-snug text-muted sm:leading-relaxed">
+          A little room for reading, finding care, and revisiting saved picks — without crowding
+          the main tabs.
         </p>
       </header>
 
-      <ul className="grid gap-4 sm:grid-cols-2 sm:gap-5">
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
         {links.map(({ href, label, description, icon: Icon }) => (
           <li key={href}>
             <Link
               href={href}
-              className="flex h-full flex-col rounded-3xl border border-border/70 bg-surface/90 p-5 shadow-sm transition hover:border-accent/25 hover:bg-soft-rose/15 sm:p-6"
+              className="flex min-h-0 flex-col rounded-2xl border border-border/70 bg-surface/90 p-4 shadow-sm transition hover:border-accent/25 hover:bg-soft-rose/15 sm:min-h-[8.5rem] sm:rounded-3xl sm:p-5"
             >
-              <Icon className="size-9 shrink-0 text-accent" aria-hidden />
-              <span className="mt-4 font-serif text-lg font-semibold text-foreground">{label}</span>
-              <span className="mt-2 text-sm leading-relaxed text-muted">{description}</span>
-              <span className="mt-4 text-xs font-semibold text-accent">Open →</span>
+              <Icon className="size-7 shrink-0 text-accent sm:size-8" aria-hidden />
+              <span className="mt-2 font-serif text-base font-semibold text-foreground sm:mt-3 sm:text-lg">
+                {label}
+              </span>
+              <span className="mt-1.5 line-clamp-2 text-xs leading-snug text-muted sm:mt-2 sm:text-sm sm:leading-relaxed">
+                {description}
+              </span>
+              <span className="mt-3 text-[11px] font-semibold text-accent sm:mt-4 sm:text-xs">Open →</span>
             </Link>
           </li>
         ))}
       </ul>
 
-      <p className="text-center text-xs leading-relaxed text-muted">
+      <p className="text-center text-[11px] leading-relaxed text-muted sm:text-xs">
         {ZYRA.name} keeps learning light — your clinician still leads your care.
       </p>
     </div>

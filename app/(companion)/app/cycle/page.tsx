@@ -35,7 +35,7 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-5 sm:gap-8">
       <CompanionPanel
         eyebrow="Cycle"
         titleLevel={1}
@@ -54,15 +54,15 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-border/70 bg-surface/95 p-6 shadow-sm sm:p-8">
-        <h2 className="font-serif text-xl font-semibold tracking-tight text-foreground">
+      <section className="rounded-2xl border border-border/70 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-8">
+        <h2 className="font-serif text-lg font-semibold tracking-tight text-foreground sm:text-xl">
           Log your period
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">
           One row per period. You can leave the end date open if you are still bleeding or not sure
           yet.
         </p>
-        <div className="mt-6">
+        <div className="mt-4 sm:mt-6">
           <LogPeriodForm />
         </div>
       </section>
@@ -75,26 +75,28 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-border/70 bg-surface/95 p-6 shadow-sm sm:p-8">
-        <h2 className="font-serif text-xl font-semibold tracking-tight text-foreground">
+      <section className="rounded-2xl border border-border/70 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-8">
+        <h2 className="font-serif text-lg font-semibold tracking-tight text-foreground sm:text-xl">
           Your history
         </h2>
         <p className="mt-2 text-sm text-muted">Newest first. {PRIVACY_ONLY_YOU}</p>
 
         {cycles.length === 0 ? (
-          <div className="mt-8 rounded-2xl border border-dashed border-border/80 bg-background/65 px-6 py-10 text-center">
-            <p className="font-serif text-lg font-medium text-foreground">Start tracking your cycle</p>
+          <div className="mt-5 rounded-xl border border-dashed border-border/80 bg-background/65 px-4 py-7 text-center sm:mt-8 sm:rounded-2xl sm:px-6 sm:py-10">
+            <p className="font-serif text-base font-medium text-foreground sm:text-lg">
+              Start tracking your cycle
+            </p>
             <p className="mt-2 text-sm leading-relaxed text-muted">
               When you&apos;re ready, add a start date above. There&apos;s no streak to protect — just
               your own pace.
             </p>
           </div>
         ) : (
-          <ul className="mt-6 space-y-4">
+          <ul className="mt-4 space-y-3 sm:mt-6 sm:space-y-4">
             {cycles.map((c) => (
               <li
                 key={c.id}
-                className="rounded-2xl border border-border/60 bg-background/85 px-4 py-4 sm:px-5"
+                className="rounded-xl border border-border/60 bg-background/85 px-3 py-3 sm:rounded-2xl sm:px-5 sm:py-4"
               >
                 <p className="text-sm font-semibold text-foreground">
                   {formatCycleDate(c.start_date)}

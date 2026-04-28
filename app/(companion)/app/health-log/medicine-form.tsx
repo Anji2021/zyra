@@ -89,7 +89,7 @@ export function MedicineForm() {
       </div>
       {state.error ? (
         <p className="rounded-2xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-950" role="alert">
-          {state.error}
+          Something went wrong. Please try again.
         </p>
       ) : null}
       <button

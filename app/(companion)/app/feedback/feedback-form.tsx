@@ -1,148 +1,156 @@
 "use client";
 
 import { useState } from "react";
-import { FRIENDLY_TRY_AGAIN } from "@/lib/zyra/user-messages";
-import { ZYRA } from "@/lib/zyra/site";
+import { FEEDBACK_TYPE_OPTIONS } from "@/lib/feedback/types";
+
+const SUCCESS_MESSAGE = "Thanks — your feedback helps improve Zyra.";
 
 export function FeedbackForm() {
-  const [type, setType] = useState<"feedback" | "topic_request">("feedback");
+  const [type, setType] = useState<string>(FEEDBACK_TYPE_OPTIONS[0].value);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
-  const [pending, setPending] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (pending) return;
-    setError(null);
-    setPending(true);
+    setStatus("submitting");
+    setErrorMessage(null);
+
     try {
       const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          source: "zyra_app",
           type,
-          title: title.trim(),
-          message: message.trim(),
+          title,
+          message,
           email: email.trim() || undefined,
         }),
       });
-      const data = (await res.json()) as { success?: boolean; error?: string };
-      if (!res.ok || data.success !== true) {
-        setError(data.error ?? FRIENDLY_TRY_AGAIN);
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+
+      if (!res.ok) {
+        if (data.error) console.error("[feedback form] submit error:", data.error);
+        setStatus("error");
+        setErrorMessage("Something went wrong. Please try again.");
         return;
       }
-      setDone(true);
+
+      setStatus("success");
       setTitle("");
       setMessage("");
       setEmail("");
-    } catch {
-      setError(FRIENDLY_TRY_AGAIN);
-    } finally {
-      setPending(false);
+      setType(FEEDBACK_TYPE_OPTIONS[0].value);
+    } catch (err) {
+      console.error("[feedback form] submit exception:", err);
+      setStatus("error");
+      setErrorMessage("Something went wrong. Please try again.");
     }
   }
 
-  if (done) {
+  if (status === "success") {
     return (
       <div
-        className="rounded-2xl border border-border/70 bg-soft-rose/35 px-5 py-6 text-center text-sm text-foreground"
+        className="rounded-3xl border border-accent/30 bg-soft-rose/30 px-5 py-8 text-center sm:px-8"
         role="status"
       >
-        <p className="font-medium">Thank you — we received your note.</p>
-        <p className="mt-2 text-muted">
-          It helps {ZYRA.name} grow in the right direction. You can send another anytime.
-        </p>
+        <p className="font-serif text-lg font-semibold text-foreground">{SUCCESS_MESSAGE}</p>
         <button
           type="button"
-          onClick={() => setDone(false)}
-          className="mt-4 text-sm font-semibold text-accent underline-offset-2 hover:underline"
+          onClick={() => setStatus("idle")}
+          className="mt-6 text-sm font-semibold text-accent underline-offset-2 hover:underline"
         >
-          Send another
+          Send another note
         </button>
       </div>
     );
   }
 
   return (
-    <form onSubmit={(ev) => void submit(ev)} className="space-y-5">
+    <form onSubmit={onSubmit} className="space-y-6">
+      {status === "error" && errorMessage ? (
+        <p
+          className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-foreground"
+          role="alert"
+        >
+          {errorMessage}
+        </p>
+      ) : null}
+
       <div className="space-y-2">
-        <label htmlFor="fb-type" className="text-sm font-semibold text-foreground">
+        <label htmlFor="feedback-type" className="text-xs font-semibold uppercase tracking-wide text-muted">
           Type
         </label>
         <select
-          id="fb-type"
+          id="feedback-type"
           value={type}
-          onChange={(e) => setType(e.target.value as "feedback" | "topic_request")}
-          className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none ring-accent/25 focus:ring-2"
+          onChange={(e) => setType(e.target.value)}
+          className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-foreground shadow-sm outline-none ring-accent/30 transition focus:ring-2"
+          required
         >
-          <option value="feedback">General feedback</option>
-          <option value="topic_request">Topic or resource request</option>
+          {FEEDBACK_TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </select>
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="fb-title" className="text-sm font-semibold text-foreground">
+        <label htmlFor="feedback-title" className="text-xs font-semibold uppercase tracking-wide text-muted">
           Title
         </label>
         <input
-          id="fb-title"
+          id="feedback-title"
           type="text"
-          required
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Short headline for your note"
           maxLength={200}
-          className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none ring-accent/25 focus:ring-2"
+          placeholder="Short summary"
+          className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-foreground shadow-sm outline-none ring-accent/30 transition focus:ring-2"
+          required
         />
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="fb-message" className="text-sm font-semibold text-foreground">
+        <label htmlFor="feedback-message" className="text-xs font-semibold uppercase tracking-wide text-muted">
           Message
         </label>
         <textarea
-          id="fb-message"
-          required
-          rows={6}
+          id="feedback-message"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="What would help you feel more supported in Zyra?"
           maxLength={8000}
-          className="w-full resize-y rounded-2xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none ring-accent/25 focus:ring-2"
+          rows={6}
+          placeholder="What would you like us to know?"
+          className="w-full resize-y rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-foreground shadow-sm outline-none ring-accent/30 transition focus:ring-2"
+          required
         />
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="fb-email" className="text-sm font-semibold text-foreground">
-          Email <span className="font-normal text-muted">(optional)</span>
+        <label htmlFor="feedback-email" className="text-xs font-semibold uppercase tracking-wide text-muted">
+          Email <span className="font-normal normal-case text-muted">(optional)</span>
         </label>
         <input
-          id="fb-email"
+          id="feedback-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="If you want a reply"
           maxLength={320}
-          className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none ring-accent/25 focus:ring-2"
+          placeholder="If you’d like a reply"
+          className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-foreground shadow-sm outline-none ring-accent/30 transition focus:ring-2"
         />
       </div>
 
-      {error ? (
-        <p className="rounded-2xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-950" role="alert">
-          {error}
-        </p>
-      ) : null}
-
       <button
         type="submit"
-        disabled={pending}
-        className="inline-flex h-11 w-full items-center justify-center rounded-full bg-accent px-8 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+        disabled={status === "submitting"}
+        className="w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {pending ? "Sending…" : "Send feedback"}
+        {status === "submitting" ? "Saving…" : "Save feedback"}
       </button>
     </form>
   );

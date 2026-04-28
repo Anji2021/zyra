@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildGoogleMapsUrl } from "@/lib/specialists/maps-url";
 import type { SavedSpecialistRow } from "@/lib/specialists/saved-queries";
-import { FRIENDLY_TRY_AGAIN } from "@/lib/zyra/user-messages";
 
 type SavedSpecialistsListProps = {
   initial: SavedSpecialistRow[];
@@ -38,15 +37,17 @@ export function SavedSpecialistsList({ initial }: SavedSpecialistsListProps) {
       });
       const data = (await res.json()) as { saved?: boolean; error?: string };
       if (!res.ok) {
-        setError(data.error ?? FRIENDLY_TRY_AGAIN);
+        if (data.error) console.error("[SavedSpecialistsList] remove error:", data.error);
+        setError("Something went wrong. Please try again.");
         return;
       }
       if (data.saved === false) {
         setRows((prev) => prev.filter((x) => x.id !== row.id));
         router.refresh();
       }
-    } catch {
-      setError(FRIENDLY_TRY_AGAIN);
+    } catch (err) {
+      console.error("[SavedSpecialistsList] remove exception:", err);
+      setError("Something went wrong. Please try again.");
     } finally {
       setBusyId(null);
     }
@@ -54,24 +55,25 @@ export function SavedSpecialistsList({ initial }: SavedSpecialistsListProps) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-border/80 bg-background/65 px-5 py-12 text-center">
-        <p className="font-serif text-lg font-medium text-foreground">You haven&apos;t saved any specialists yet</p>
+      <div className="rounded-2xl border border-dashed border-border/80 bg-background/65 px-4 py-8 text-center sm:rounded-3xl sm:px-5 sm:py-12">
+        <p className="font-serif text-base font-medium text-foreground sm:text-lg">
+          You haven&apos;t saved any specialists yet
+        </p>
         <p className="mt-2 text-sm leading-relaxed text-muted">
-          When you find a provider you want to remember, tap Save from search results — they&apos;ll
-          land here, only for you.
+          Save specialists you may want to revisit later.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {error ? (
         <p className="rounded-2xl border border-red-200/80 bg-red-50 px-4 py-3 text-center text-sm text-red-950" role="alert">
           {error}
         </p>
       ) : null}
-      <ul className="space-y-4">
+      <ul className="space-y-3 sm:space-y-4">
         {rows.map((row) => {
           const name = row.name ?? "Unknown";
           const address = row.address ?? "";
@@ -80,18 +82,20 @@ export function SavedSpecialistsList({ initial }: SavedSpecialistsListProps) {
           return (
             <li
               key={row.id}
-              className="rounded-2xl border border-border/70 bg-background/90 p-5 shadow-sm sm:p-6"
+              className="rounded-xl border border-border/70 bg-background/90 p-4 shadow-sm sm:rounded-2xl sm:p-6"
             >
-              <h2 className="font-serif text-lg font-semibold tracking-tight text-foreground">{name}</h2>
+              <h2 className="font-serif text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                {name}
+              </h2>
               {address ? (
-                <p className="mt-2 text-sm leading-relaxed text-muted">{address}</p>
+                <p className="mt-1.5 text-sm leading-snug text-muted sm:mt-2 sm:leading-relaxed">{address}</p>
               ) : null}
               {row.rating != null ? (
-                <p className="mt-2 text-xs text-muted sm:text-sm">
+                <p className="mt-1.5 text-xs text-muted sm:mt-2 sm:text-sm">
                   <span className="font-medium text-foreground">Rating:</span> {Number(row.rating).toFixed(1)}
                 </p>
               ) : null}
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2 sm:mt-4">
                 <a
                   href={mapsUrl}
                   target="_blank"

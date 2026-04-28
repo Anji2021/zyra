@@ -16,7 +16,7 @@ export default async function ProfilePage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-5 sm:gap-8">
       <CompanionPanel
         eyebrow="You"
         titleLevel={1}
@@ -24,7 +24,7 @@ export default async function ProfilePage() {
         description="What you shared during onboarding is stored privately for your companion experience. Richer editing, export, and deletion controls will arrive in a later release."
       >
         {profile ? (
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
+          <dl className="grid gap-3 text-sm sm:grid-cols-2 sm:gap-4">
             <div>
               <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Name</dt>
               <dd className="mt-1 text-foreground">{profile.full_name ?? "—"}</dd>
