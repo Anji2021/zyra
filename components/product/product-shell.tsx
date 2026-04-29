@@ -96,7 +96,7 @@ export function ProductShell({
         className="fixed inset-x-0 bottom-0 z-20 border-t border-border/80 bg-surface/95 px-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-4px_20px_-10px_rgba(42,38,44,0.07)] backdrop-blur-md lg:hidden"
         aria-label="Primary"
       >
-        <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-0.5">
+        <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-1">
           {productMobileNav.map((item) => {
             const active = navIsActive(pathname, item.href);
             const Icon = item.icon;
@@ -105,7 +105,7 @@ export function ProductShell({
                 <Link
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex h-full min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1 text-[10px] font-semibold leading-none tracking-tight transition-colors duration-200 ease-out ${
+                  className={`flex h-full min-h-[3.5rem] flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1 text-[11px] font-semibold leading-none tracking-tight transition-colors duration-200 ease-out ${
                     active
                       ? "text-accent"
                       : "text-muted hover:text-foreground/90"

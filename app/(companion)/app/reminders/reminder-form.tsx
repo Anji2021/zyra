@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState } from "react";
 import { createReminder, type ReminderActionState } from "./actions";
 
 const REMINDER_TYPES = [
@@ -39,10 +39,6 @@ function localTimeInputValue(): string {
 
 export function ReminderForm({ defaults }: { defaults?: ReminderFormDefaults }) {
   const [state, formAction, pending] = useActionState<ReminderActionState, FormData>(createReminder, {});
-
-  useEffect(() => {
-    if (state.error) console.error("[ReminderForm]", state.error);
-  }, [state.error]);
 
   return (
     <form action={formAction} className="space-y-4">

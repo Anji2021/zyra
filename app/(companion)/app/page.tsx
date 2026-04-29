@@ -169,34 +169,41 @@ export default async function HomePage() {
   const nextPeriodDaysAway = nextPeriodEstimate ? daysUntilDate(nextPeriodEstimate) : null;
   const featureCards = [
     {
+      title: "DoctorMatch AI",
+      description:
+        "Find the right specialist based on your symptoms, goals, and location.",
+      href: "/app/specialists",
+      cta: "Find a Specialist",
+    },
+    {
       title: "Track your cycle",
       description: "Log start and end dates to keep a gentle cycle history.",
       href: "/app/cycle",
+      cta: "Open",
     },
     {
       title: "Log symptoms & medicines",
       description: "Capture how you feel and what you’re taking in one place.",
       href: "/app/health-log",
+      cta: "Open",
     },
     {
       title: "Understand insights",
       description: "See simple pattern summaries from your own logs.",
       href: "/app/insights",
+      cta: "Open",
     },
     {
       title: "Ask Zyra",
       description: "Get supportive, educational guidance when you need it.",
       href: "/app/assistant",
-    },
-    {
-      title: "Find specialists",
-      description: "Discover and save specialists you may want to revisit.",
-      href: "/app/specialists",
+      cta: "Open",
     },
     {
       title: "Set reminders",
       description: "Stay on track with gentle reminder prompts.",
       href: "/app/reminders",
+      cta: "Open",
     },
   ] as const;
 
@@ -247,9 +254,9 @@ export default async function HomePage() {
               <p className="mt-1 text-sm text-muted">{card.description}</p>
               <Link
                 href={card.href}
-                className="mt-3 inline-flex h-9 items-center justify-center rounded-full border border-border bg-surface px-4 text-xs font-semibold text-accent transition hover:border-accent/40 sm:text-sm"
+                className="mt-3 inline-flex min-h-[2.5rem] items-center justify-center rounded-full border border-border bg-surface px-4 text-xs font-semibold text-accent transition hover:border-accent/40 sm:text-sm"
               >
-                Open
+                {card.cta}
               </Link>
             </li>
           ))}

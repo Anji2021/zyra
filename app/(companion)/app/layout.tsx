@@ -1,9 +1,16 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { ProductShell } from "@/components/product/product-shell";
 import { getProfileForUser } from "@/lib/profiles/queries";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();

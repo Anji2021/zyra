@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState } from "react";
 import { type LogSymptomState, logSymptom } from "./actions";
 
 function localDateInputValue(): string {
@@ -13,10 +13,6 @@ function localDateInputValue(): string {
 
 export function SymptomForm() {
   const [state, formAction, pending] = useActionState<LogSymptomState, FormData>(logSymptom, {});
-
-  useEffect(() => {
-    if (state.error) console.error("[SymptomForm]", state.error);
-  }, [state.error]);
 
   return (
     <form action={formAction} className="space-y-4">

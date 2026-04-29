@@ -75,7 +75,7 @@ export function AppTopBar({ email, displayName, avatarUrl }: AppTopBarProps) {
             aria-expanded={open}
             aria-label={label}
             title={label}
-            className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border bg-background/90 py-0.5 pl-0.5 pr-1.5 transition hover:bg-soft-rose/25 sm:gap-2 sm:py-1 sm:pl-1 sm:pr-3"
+            className="flex min-h-[2.5rem] min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border bg-background/90 py-0.5 pl-0.5 pr-1.5 transition hover:bg-soft-rose/25 sm:gap-2 sm:py-1 sm:pl-1 sm:pr-3"
           >
             {avatarUrl ? (
               <Image
@@ -113,7 +113,7 @@ export function AppTopBar({ email, displayName, avatarUrl }: AppTopBarProps) {
                 href="/app/profile"
                 role="menuitem"
                 onClick={() => setOpen(false)}
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-foreground transition hover:bg-soft-rose/30"
+                className="flex min-h-[2.5rem] w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-foreground transition hover:bg-soft-rose/30"
               >
                 <UserRound className="size-4 shrink-0 text-accent" aria-hidden />
                 Profile
@@ -122,7 +122,7 @@ export function AppTopBar({ email, displayName, avatarUrl }: AppTopBarProps) {
                 href="/app/feedback"
                 role="menuitem"
                 onClick={() => setOpen(false)}
-                className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-foreground transition hover:bg-soft-rose/30"
+                className="mt-1 flex min-h-[2.5rem] w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-foreground transition hover:bg-soft-rose/30"
               >
                 <MessageSquareText className="size-4 shrink-0 text-accent" aria-hidden />
                 Feedback
@@ -132,7 +132,7 @@ export function AppTopBar({ email, displayName, avatarUrl }: AppTopBarProps) {
                 role="menuitem"
                 onClick={() => void handleSignOut()}
                 disabled={!isConfigured || signingOut}
-                className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-foreground transition hover:bg-soft-rose/30 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-1 flex min-h-[2.5rem] w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-foreground transition hover:bg-soft-rose/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {signingOut ? (
                   <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden />

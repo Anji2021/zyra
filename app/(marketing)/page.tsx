@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { ZYRA } from "@/lib/zyra/site";
@@ -35,9 +36,90 @@ const features = [
   },
 ];
 
+const faqItems = [
+  {
+    question: "What is Zyra?",
+    answer:
+      "Zyra is a women’s health companion for cycle tracking, symptom tracking, educational support, and thoughtful next steps.",
+  },
+  {
+    question: "Who does Zyra help?",
+    answer:
+      "Zyra helps people who want a calm place to track periods, symptoms, and reminders, including those navigating irregular cycles or PCOS support needs.",
+  },
+  {
+    question: "Is Zyra a medical diagnosis tool?",
+    answer:
+      "No. Zyra provides educational guidance only and does not diagnose, prescribe, or replace licensed clinical care.",
+  },
+  {
+    question: "Does Zyra include a women’s health AI assistant?",
+    answer:
+      "Yes. Zyra includes an educational AI assistant for general questions, with clear safety boundaries and clinician-first guidance.",
+  },
+] as const;
+
+export const metadata: Metadata = {
+  title: "Zyra | Women’s Health Companion for Period Tracking and PCOS Support",
+  description:
+    "Zyra is a women’s health companion for period tracker workflows, cycle tracking, PCOS support, symptom tracker logs, and a women’s health AI assistant.",
+  keywords: [
+    "women's health companion",
+    "period tracker",
+    "cycle tracking",
+    "PCOS support",
+    "symptom tracker",
+    "women's health AI assistant",
+  ],
+  openGraph: {
+    title: "Zyra | Women’s Health Companion",
+    description:
+      "Track your cycle, log symptoms, get PCOS support education, and use a women’s health AI assistant in one private space.",
+    type: "website",
+    images: [{ url: "/zyra-icon.png", width: 512, height: 512, alt: "Zyra women health companion" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Zyra | Women’s Health Companion",
+    description:
+      "Period tracker, cycle tracking, symptom tracker, PCOS support, and women’s health AI assistant.",
+    images: ["/zyra-icon.png"],
+  },
+};
+
 export default function MarketingHomePage() {
+  const webAppJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: ZYRA.name,
+    applicationCategory: "HealthApplication",
+    operatingSystem: "Web",
+    description:
+      "A women’s health companion for period tracker and cycle tracking workflows, symptom tracker logs, PCOS support education, and a women’s health AI assistant.",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+    },
+  };
+
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqItems.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background text-foreground">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webAppJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <header className="border-b border-border/80 bg-surface/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <Link
@@ -136,6 +218,34 @@ export default function MarketingHomePage() {
           </div>
         </section>
 
+        <section className="px-5 py-16 sm:px-8 sm:py-20">
+          <div className="mx-auto max-w-5xl">
+            <h2 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">What is Zyra?</h2>
+            <p className="mt-4 max-w-3xl text-lg leading-relaxed text-muted">
+              Zyra is a women&apos;s health companion that combines period tracker routines, cycle tracking,
+              symptom tracker history, PCOS support education, and a women&apos;s health AI assistant in one calm product.
+            </p>
+            <h3 className="mt-10 font-serif text-2xl font-semibold tracking-tight">Who it helps</h3>
+            <p className="mt-3 max-w-3xl text-base leading-relaxed text-muted">
+              Zyra supports people who want a private, supportive place to understand cycle patterns, manage symptoms,
+              and prepare for conversations with clinicians.
+            </p>
+            <h3 className="mt-10 font-serif text-2xl font-semibold tracking-tight">Women&apos;s health topics covered</h3>
+            <ul className="mt-4 grid gap-3 text-sm text-muted sm:grid-cols-2">
+              {[
+                "Period tracker and cycle tracking fundamentals",
+                "PCOS support and irregular period education",
+                "Symptom tracker patterns and prep for doctor visits",
+                "Hormonal health and fertility literacy basics",
+              ].map((topic) => (
+                <li key={topic} className="rounded-2xl border border-border bg-surface px-4 py-3">
+                  {topic}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
         <section id="product" className="px-5 py-16 sm:px-8 sm:py-20">
           <div className="mx-auto max-w-5xl">
             <div className="max-w-2xl">
@@ -196,6 +306,20 @@ export default function MarketingHomePage() {
         </section>
 
         <section className="px-5 py-16 sm:px-8 sm:py-20">
+          <div className="mx-auto max-w-4xl">
+            <h2 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">FAQ</h2>
+            <div className="mt-8 space-y-4">
+              {faqItems.map((item) => (
+                <article key={item.question} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                  <h3 className="font-serif text-lg font-semibold text-foreground">{item.question}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted">{item.answer}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="px-5 py-16 sm:px-8 sm:py-20">
           <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-surface px-8 py-10 text-center shadow-sm">
             <h2 className="font-serif text-2xl font-semibold">Open your private space</h2>
             <p className="mt-3 text-muted">
@@ -216,6 +340,15 @@ export default function MarketingHomePage() {
           licensed medical care.
         </p>
         <p className="mt-4 text-xs text-muted/80">
+          <Link href="/privacy" className="underline-offset-2 hover:underline">
+            Privacy
+          </Link>{" "}
+          ·{" "}
+          <Link href="/terms" className="underline-offset-2 hover:underline">
+            Terms
+          </Link>
+        </p>
+        <p className="mt-2 text-xs text-muted/80">
           © {new Date().getFullYear()} {ZYRA.name}. All rights reserved.
         </p>
       </footer>

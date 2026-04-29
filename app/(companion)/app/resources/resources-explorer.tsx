@@ -48,32 +48,34 @@ export function ResourcesExplorer({ articles }: ResourcesExplorerProps) {
           className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-foreground shadow-sm outline-none ring-accent/30 transition focus:ring-2"
         />
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setCategory("all")}
-            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-              category === "all"
-                ? "bg-accent text-accent-foreground"
-                : "border border-border bg-surface text-muted hover:border-accent/40"
-            }`}
-          >
-            All
-          </button>
-          {RESOURCE_CATEGORIES.map((c) => (
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+          <div className="flex min-w-max gap-2 pr-1">
             <button
-              key={c}
               type="button"
-              onClick={() => setCategory(c)}
+              onClick={() => setCategory("all")}
               className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-                category === c
+                category === "all"
                   ? "bg-accent text-accent-foreground"
                   : "border border-border bg-surface text-muted hover:border-accent/40"
               }`}
             >
-              {c}
+              All
             </button>
-          ))}
+            {RESOURCE_CATEGORIES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCategory(c)}
+                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                  category === c
+                    ? "bg-accent text-accent-foreground"
+                    : "border border-border bg-surface text-muted hover:border-accent/40"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

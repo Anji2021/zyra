@@ -1,14 +1,10 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState } from "react";
 import { type LogMedicineState, logMedicine } from "./actions";
 
 export function MedicineForm() {
   const [state, formAction, pending] = useActionState<LogMedicineState, FormData>(logMedicine, {});
-
-  useEffect(() => {
-    if (state.error) console.error("[MedicineForm]", state.error);
-  }, [state.error]);
 
   return (
     <form action={formAction} className="space-y-4">

@@ -16,11 +16,33 @@ const serif = Lora({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: {
     default: defaultTitle,
     template: `%s — ${ZYRA.name}`,
   },
   description: ZYRA.description,
+  keywords: [
+    "women's health companion",
+    "period tracker",
+    "cycle tracking",
+    "PCOS support",
+    "symptom tracker",
+    "women's health AI assistant",
+  ],
+  openGraph: {
+    title: defaultTitle,
+    description: ZYRA.description,
+    type: "website",
+    siteName: ZYRA.name,
+    images: [{ url: "/zyra-icon.png", width: 512, height: 512, alt: `${ZYRA.name} logo` }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: defaultTitle,
+    description: ZYRA.description,
+    images: ["/zyra-icon.png"],
+  },
   icons: {
     icon: [
       { url: "/zyra-icon.svg", type: "image/svg+xml" },

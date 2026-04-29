@@ -1,5 +1,13 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { ZYRA } from "@/lib/zyra/site";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -1,14 +1,10 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState } from "react";
 import { type LogCycleState, logPeriod } from "./actions";
 
 export function LogPeriodForm() {
   const [state, formAction, pending] = useActionState<LogCycleState, FormData>(logPeriod, {});
-
-  useEffect(() => {
-    if (state.error) console.error("[LogPeriodForm]", state.error);
-  }, [state.error]);
 
   return (
     <form action={formAction} className="space-y-4 sm:space-y-5">
