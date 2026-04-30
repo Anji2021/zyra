@@ -1,9 +1,11 @@
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useEffect, useMemo, useState } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { Session } from "@supabase/supabase-js";
 import {
   ApiClientError,
@@ -26,7 +28,6 @@ type TabParamList = {
   Cycle: undefined;
   Health: undefined;
   DoctorMatch: undefined;
-  Insights: undefined;
   Profile: undefined;
 };
 
@@ -57,7 +58,10 @@ const navTheme = {
 };
 
 const AUTH_REDIRECT_TO = process.env.EXPO_PUBLIC_AUTH_REDIRECT_TO ?? "zyra://auth/callback";
+const AUTH_RESET_REDIRECT_TO = process.env.EXPO_PUBLIC_AUTH_RESET_REDIRECT_TO ?? "zyra://auth/reset-password";
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+
+WebBrowser.maybeCompleteAuthSession();
 
 function extractParamsFromUrl(url: string): URLSearchParams {
   const params = new URLSearchParams();
@@ -363,9 +367,9 @@ function HealthScreen() {
 }
 
 function DoctorMatchScreen({
-  apiOptions,
+  getApiOptions,
 }: {
-  apiOptions?: { baseUrl: string; headers?: Record<string, string> };
+  getApiOptions: () => Promise<{ baseUrl: string; headers?: Record<string, string> } | null>;
 }) {
   const [symptoms, setSymptoms] = useState("");
   const [location, setLocation] = useState("");
@@ -386,11 +390,20 @@ function DoctorMatchScreen({
     setLoading(true);
     setError(null);
     try {
+      const apiOptions = await getApiOptions();
+      if (!apiOptions) {
+        setError("Please sign in again.");
+        return;
+      }
       const dm = await generateDoctorMatch({ symptoms: cleanSymptoms }, apiOptions);
       setPattern(dm.recommendation.pattern || "No pattern available yet.");
       setSpecialist(dm.recommendation.specialist || "Specialist recommendation unavailable.");
 
       const specialistType = inferSpecialistTypeFromDoctorMatch(dm.recommendation);
+      if (!apiOptions.headers?.Authorization) {
+        setError("Please sign in again.");
+        return;
+      }
       const search = await searchNearbySpecialists(
         {
           location: cleanLocation,
@@ -470,54 +483,6 @@ function DoctorMatchScreen({
   );
 }
 
-function InsightsScreen() {
-  const [cycles, setCycles] = useState<CycleRow[]>([]);
-  const [symptoms, setSymptoms] = useState<SymptomRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const [c, s] = await Promise.all([
-        supabase.from("cycles").select("id,user_id,start_date,end_date,notes,created_at").eq("user_id", user.id).order("start_date", { ascending: false }).limit(5),
-        supabase.from("symptoms").select("id,user_id,symptom,severity,logged_date,notes,created_at").eq("user_id", user.id).order("logged_date", { ascending: false }).limit(5),
-      ]);
-      if (c.error) setError(c.error.message);
-      if (s.error) setError(s.error.message);
-      setCycles((c.data ?? []) as CycleRow[]);
-      setSymptoms((s.data ?? []) as SymptomRow[]);
-    }
-    void load();
-  }, []);
-
-  const commonSymptom = useMemo(() => {
-    if (symptoms.length === 0) return null;
-    const counts = new Map<string, number>();
-    for (const s of symptoms) counts.set(s.symptom, (counts.get(s.symptom) ?? 0) + 1);
-    return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  }, [symptoms]);
-
-  return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scrollPad}>
-        {cardWrap(
-          <>
-            <Text style={styles.cardTitle}>Insights</Text>
-            <Text style={styles.cardSub}>Simple recent patterns from your logs.</Text>
-            <View style={styles.row}><Text style={styles.rowLabel}>Cycles logged</Text><Text style={styles.rowValue}>{cycles.length}</Text></View>
-            <View style={styles.row}><Text style={styles.rowLabel}>Symptoms logged</Text><Text style={styles.rowValue}>{symptoms.length}</Text></View>
-            <View style={styles.rowLast}><Text style={styles.rowLabel}>Most common symptom</Text><Text style={styles.rowValue}>{commonSymptom ?? "-"}</Text></View>
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          </>,
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
 const emptyHealthProfile: SaveHealthProfileInput = {
   known_conditions: [],
   current_concerns: [],
@@ -531,10 +496,10 @@ const emptyHealthProfile: SaveHealthProfileInput = {
 
 function ProfileScreen({
   onSignOut,
-  apiOptions,
+  getApiOptions,
 }: {
   onSignOut: () => Promise<void>;
-  apiOptions?: { baseUrl: string; headers?: Record<string, string> };
+  getApiOptions: () => Promise<{ baseUrl: string; headers?: Record<string, string> } | null>;
 }) {
   const [profile, setProfile] = useState<HealthProfile | null>(null);
   const [editing, setEditing] = useState(false);
@@ -549,6 +514,9 @@ function ProfileScreen({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [passwordDraft, setPasswordDraft] = useState("");
+  const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   function applyProfile(p: HealthProfile | null) {
     const x = p ?? ({ ...emptyHealthProfile, user_id: "" } as HealthProfile);
@@ -565,6 +533,11 @@ function ProfileScreen({
   async function loadProfile() {
     try {
       setError(null);
+      const apiOptions = await getApiOptions();
+      if (!apiOptions) {
+        setError("Please sign in again to load profile.");
+        return;
+      }
       const res = await getHealthProfile(apiOptions);
       setProfile(res.profile);
       applyProfile(res.profile);
@@ -581,6 +554,11 @@ function ProfileScreen({
     setSaving(true);
     setError(null);
     try {
+      const apiOptions = await getApiOptions();
+      if (!apiOptions) {
+        setError("Please sign in again to save profile.");
+        return;
+      }
       const parsedAvg = avgCycleLength.trim() ? Math.round(Number(avgCycleLength)) : null;
       const payload: SaveHealthProfileInput = {
         known_conditions: knownConditions.split(",").map((s) => s.trim()).filter(Boolean),
@@ -610,6 +588,20 @@ function ProfileScreen({
     } finally {
       setSigningOut(false);
     }
+  }
+
+  async function handleSetPassword() {
+    if (passwordDraft.length < 8) {
+      setPasswordMsg("Password should be at least 8 characters.");
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: passwordDraft });
+    if (error) {
+      setPasswordMsg(error.message);
+      return;
+    }
+    setPasswordDraft("");
+    setPasswordMsg("Password updated.");
   }
 
   return (
@@ -652,6 +644,28 @@ function ProfileScreen({
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+          <View style={styles.resultCard}>
+            <Text style={styles.resultTitle}>Account security</Text>
+            <Text style={styles.nearbyMeta}>Optional: set or change password for this account.</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                placeholder="New password"
+                placeholderTextColor="#9E8A99"
+                secureTextEntry={!passwordVisible}
+                value={passwordDraft}
+                onChangeText={setPasswordDraft}
+                style={styles.inputWithIcon}
+              />
+              <TouchableOpacity style={styles.inputIconBtn} onPress={() => setPasswordVisible((v) => !v)}>
+                <Ionicons name={passwordVisible ? "eye-off-outline" : "eye-outline"} size={18} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleSetPassword}>
+              <Text style={styles.secondaryButtonText}>Set password</Text>
+            </TouchableOpacity>
+            {passwordMsg ? <Text style={styles.errorText}>{passwordMsg}</Text> : null}
+          </View>
+
           <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.85} onPress={handleSignOut} disabled={signingOut}>
             <Text style={styles.secondaryButtonText}>{signingOut ? "Signing out..." : "Sign out"}</Text>
           </TouchableOpacity>
@@ -665,17 +679,23 @@ function AuthScreen({
   mode,
   onToggleMode,
   onSubmit,
+  onForgotPassword,
+  onGoogle,
   loading,
   error,
 }: {
   mode: "signin" | "signup";
   onToggleMode: () => void;
-  onSubmit: (email: string, password: string) => Promise<void>;
+  onSubmit: (name: string, email: string, password: string) => Promise<void>;
+  onForgotPassword: (email: string) => Promise<void>;
+  onGoogle: () => Promise<void>;
   loading: boolean;
   error: string | null;
 }) {
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   const submitLabel = mode === "signin" ? "Sign in" : "Create account";
 
@@ -687,6 +707,16 @@ function AuthScreen({
           <Text style={styles.cardTitle}>{mode === "signin" ? "Welcome back" : "Create your account"}</Text>
           <Text style={styles.cardSub}>Use the same Supabase account as web.</Text>
 
+          {mode === "signup" ? (
+            <TextInput
+              placeholder="Full name"
+              placeholderTextColor="#9E8A99"
+              value={fullName}
+              onChangeText={setFullName}
+              style={styles.input}
+            />
+          ) : null}
+
           <TextInput
             placeholder="Email"
             placeholderTextColor="#9E8A99"
@@ -696,22 +726,31 @@ function AuthScreen({
             onChangeText={setEmail}
             style={styles.input}
           />
-          <TextInput
-            placeholder="Password"
-            placeholderTextColor="#9E8A99"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            style={styles.input}
-          />
+          <View style={styles.inputWrap}>
+            <TextInput
+              placeholder="Password"
+              placeholderTextColor="#9E8A99"
+              secureTextEntry={!passwordVisible}
+              value={password}
+              onChangeText={setPassword}
+              style={styles.inputWithIcon}
+            />
+            <TouchableOpacity style={styles.inputIconBtn} onPress={() => setPasswordVisible((v) => !v)}>
+              <Ionicons name={passwordVisible ? "eye-off-outline" : "eye-outline"} size={18} color={colors.muted} />
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={styles.primaryButton}
             activeOpacity={0.85}
-            onPress={() => onSubmit(email.trim(), password)}
+            onPress={() => onSubmit(fullName.trim(), email.trim(), password)}
             disabled={loading}
           >
             <Text style={styles.primaryButtonText}>{loading ? "Please wait..." : submitLabel}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={onGoogle} disabled={loading}>
+            <Text style={styles.secondaryButtonText}>Continue with Google</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.authSwitch} onPress={onToggleMode} disabled={loading}>
@@ -719,6 +758,12 @@ function AuthScreen({
               {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
             </Text>
           </TouchableOpacity>
+
+          {mode === "signin" ? (
+            <TouchableOpacity style={styles.authSwitch} onPress={() => onForgotPassword(email.trim())} disabled={loading}>
+              <Text style={styles.authSwitchText}>Forgot password?</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
@@ -733,24 +778,37 @@ export default function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  const apiOptions = useMemo(() => {
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [recoveryPasswordVisible, setRecoveryPasswordVisible] = useState(false);
+  async function getProtectedApiOptions(): Promise<{ baseUrl: string; headers?: Record<string, string> } | null> {
     const baseUrl = API_BASE_URL.trim();
-    if (!baseUrl) return undefined;
-    if (!session?.access_token) return { baseUrl };
+    if (!baseUrl) return null;
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.log("[mobile auth] session exists: false");
+      return null;
+    }
+    const accessToken = data.session?.access_token;
+    const hasSession = Boolean(accessToken);
+    console.log("[mobile auth] session exists:", hasSession);
+    if (!accessToken) return null;
     return {
       baseUrl,
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
       },
     };
-  }, [session?.access_token]);
+  }
 
   useEffect(() => {
     let mounted = true;
 
     async function handleAuthRedirectUrl(url: string | null) {
+      console.log("[mobile auth] callback url received:", Boolean(url));
       if (!url) return;
-      if (!url.startsWith("zyra://auth/callback")) return;
+      if (!url.startsWith("zyra://auth/callback") && !url.startsWith("zyra://auth/reset-password")) return;
       const params = extractParamsFromUrl(url);
 
       const code = params.get("code");
@@ -776,12 +834,16 @@ export default function App() {
             refresh_token: refreshToken,
           });
           if (error) throw error;
+          if (type === "recovery" || url.startsWith("zyra://auth/reset-password")) {
+            setRecoveryMode(true);
+          }
           return;
         }
         if (type === "signup") {
           setAuthError("Email confirmed. Please sign in to continue.");
         }
       } catch (error) {
+        console.log("[mobile auth] callback error:", error instanceof Error ? error.message : "unknown callback error");
         setAuthError(error instanceof Error ? error.message : "Could not complete email confirmation.");
       }
     }
@@ -789,6 +851,7 @@ export default function App() {
     supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return;
       if (error) {
+        console.log("[mobile auth] session error:", error.message);
         setAuthError(error.message);
       }
       setSession(data.session ?? null);
@@ -817,7 +880,7 @@ export default function App() {
     };
   }, []);
 
-  async function handleAuthSubmit(email: string, password: string) {
+  async function handleAuthSubmit(name: string, email: string, password: string) {
     if (!email || !password) {
       setAuthError("Please enter email and password.");
       return;
@@ -829,11 +892,18 @@ export default function App() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
+        if (!name) {
+          setAuthError("Please enter your name.");
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: AUTH_REDIRECT_TO,
+            data: {
+              full_name: name,
+            },
           },
         });
         if (error) throw error;
@@ -841,6 +911,87 @@ export default function App() {
       }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Authentication failed.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleForgotPassword(email: string) {
+    if (!email) {
+      setAuthError("Enter your email first, then tap Forgot password.");
+      return;
+    }
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: AUTH_RESET_REDIRECT_TO,
+      });
+      if (error) throw error;
+      setAuthError("Password reset email sent. Check your inbox.");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not send reset email.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleGoogleAuth() {
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: AUTH_REDIRECT_TO,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      console.log("Google auth started");
+      if (!data?.url) throw new Error("Google auth URL is missing.");
+      const res = await WebBrowser.openAuthSessionAsync(data.url, AUTH_REDIRECT_TO);
+      console.log("Callback received");
+      if (res.type !== "success" || !res.url) return;
+      const params = extractParamsFromUrl(res.url);
+      const code = params.get("code");
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+      if (code) {
+        const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeErr) throw exchangeErr;
+      } else if (accessToken && refreshToken) {
+        const { error: setErr } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (setErr) throw setErr;
+      }
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log(`Session created: ${Boolean(sessionData.session)}`);
+    } catch (error) {
+      console.log(error instanceof Error ? error.message : "Google auth error");
+      setAuthError(error instanceof Error ? error.message : "Google sign in failed.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleSetRecoveryPassword() {
+    if (recoveryPassword.length < 8) {
+      setAuthError("New password should be at least 8 characters.");
+      return;
+    }
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: recoveryPassword });
+      if (error) throw error;
+      setRecoveryPassword("");
+      setRecoveryMode(false);
+      setAuthError("Password updated. You can continue in the app.");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not update password.");
     } finally {
       setAuthBusy(false);
     }
@@ -867,12 +1018,45 @@ export default function App() {
   }
 
   if (!session) {
+    if (recoveryMode) {
+      return (
+        <SafeAreaView style={styles.screen}>
+          <View style={styles.centerWrap}>
+            <View style={styles.card}>
+              <Text style={styles.kicker}>ZYRA</Text>
+              <Text style={styles.cardTitle}>Set a new password</Text>
+              <Text style={styles.cardSub}>Choose a new password to complete your reset.</Text>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  placeholder="New password"
+                  placeholderTextColor="#9E8A99"
+                  secureTextEntry={!recoveryPasswordVisible}
+                  value={recoveryPassword}
+                  onChangeText={setRecoveryPassword}
+                  style={styles.inputWithIcon}
+                />
+                <TouchableOpacity style={styles.inputIconBtn} onPress={() => setRecoveryPasswordVisible((v) => !v)}>
+                  <Ionicons name={recoveryPasswordVisible ? "eye-off-outline" : "eye-outline"} size={18} color={colors.muted} />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleSetRecoveryPassword} disabled={authBusy}>
+                <Text style={styles.primaryButtonText}>{authBusy ? "Saving..." : "Save new password"}</Text>
+              </TouchableOpacity>
+              {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
+            </View>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
     return (
       <AuthScreen
         mode={authMode}
         loading={authBusy}
         error={authError}
         onSubmit={handleAuthSubmit}
+        onForgotPassword={handleForgotPassword}
+        onGoogle={handleGoogleAuth}
         onToggleMode={() => {
           setAuthError(null);
           setAuthMode((prev) => (prev === "signin" ? "signup" : "signin"));
@@ -884,7 +1068,7 @@ export default function App() {
   return (
     <NavigationContainer theme={navTheme}>
       <Tab.Navigator
-        screenOptions={{
+        screenOptions={({ route }) => ({
           headerStyle: { backgroundColor: "#FFFDF9" },
           headerTitleStyle: { color: colors.text, fontWeight: "600" },
           tabBarStyle: {
@@ -897,17 +1081,29 @@ export default function App() {
           tabBarLabelStyle: { fontSize: 12, fontWeight: "600" },
           tabBarActiveTintColor: colors.accentDark,
           tabBarInactiveTintColor: colors.muted,
-        }}
+          tabBarIcon: ({ color, size, focused }) => {
+            const iconName =
+              route.name === "Home"
+                ? (focused ? "home" : "home-outline")
+                : route.name === "Cycle"
+                  ? (focused ? "calendar" : "calendar-outline")
+                  : route.name === "Health"
+                    ? (focused ? "heart" : "heart-outline")
+                    : route.name === "DoctorMatch"
+                      ? (focused ? "medkit" : "medkit-outline")
+                      : (focused ? "person" : "person-outline");
+            return <Ionicons name={iconName} size={size} color={color} />;
+          },
+        })}
       >
         <Tab.Screen name="Home" component={HomeScreen} />
         <Tab.Screen name="Cycle" component={CycleScreen} />
         <Tab.Screen name="Health" component={HealthScreen} />
         <Tab.Screen name="DoctorMatch">
-          {() => <DoctorMatchScreen apiOptions={apiOptions} />}
+          {() => <DoctorMatchScreen getApiOptions={getProtectedApiOptions} />}
         </Tab.Screen>
-        <Tab.Screen name="Insights" component={InsightsScreen} />
         <Tab.Screen name="Profile">
-          {() => <ProfileScreen onSignOut={handleSignOut} apiOptions={apiOptions} />}
+          {() => <ProfileScreen onSignOut={handleSignOut} getApiOptions={getProtectedApiOptions} />}
         </Tab.Screen>
       </Tab.Navigator>
       <StatusBar style="dark" />
@@ -983,6 +1179,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     marginBottom: 10,
+  },
+  inputWrap: {
+    position: "relative",
+    marginBottom: 10,
+  },
+  inputWithIcon: {
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingRight: 42,
+    fontSize: 14,
+    color: colors.text,
+  },
+  inputIconBtn: {
+    position: "absolute",
+    right: 10,
+    top: 0,
+    bottom: 0,
+    width: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
   textArea: {
     minHeight: 88,
