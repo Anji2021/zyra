@@ -95,6 +95,8 @@ export type ApiClientOptions = {
   baseUrl?: string;
   fetcher?: typeof fetch;
   headers?: Record<string, string>;
+  /** Optional async auth headers resolver, used before each request. */
+  getAuthHeaders?: () => Promise<Record<string, string> | null>;
 };
 
 export type { CycleRow, MedicineRow, SymptomRow } from "./records";

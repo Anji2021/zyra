@@ -57,10 +57,17 @@ export async function requestJson<TResponse>(
   const url = `${base}${path}`;
 
   try {
+    const authHeaders = (await options?.getAuthHeaders?.()) ?? null;
+    if (authHeaders) {
+      console.log("[shared api] auth headers resolved", {
+        authorizationExists: Boolean(authHeaders.Authorization ?? authHeaders.authorization),
+      });
+    }
     const response = await fetcher(url, {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        ...(authHeaders ?? {}),
         ...(options?.headers ?? {}),
         ...(init.headers ?? {}),
       },
