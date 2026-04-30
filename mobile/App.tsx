@@ -65,6 +65,9 @@ const AUTH_REDIRECT_TO = "zyra://auth/callback";
 const AUTH_RESET_REDIRECT_TO = process.env.EXPO_PUBLIC_AUTH_RESET_REDIRECT_TO ?? "zyra://auth/reset-password";
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
+/** Never use API base URL (e.g. Vercel) as Supabase OAuth redirect — Google must return to Expo / native app. */
+const FORBIDDEN_GOOGLE_REDIRECT_MARKER = "zyra-gold.vercel.app";
+
 WebBrowser.maybeCompleteAuthSession();
 
 /** Set while a Google OAuth session is armed (Expo AuthSession URI may differ from zyra://). */
@@ -94,6 +97,14 @@ function endGoogleOAuthRedirectArm(timeoutMs = 15_000) {
   setTimeout(() => {
     googleOAuthRedirectToLatest = null;
   }, timeoutMs);
+}
+
+function authorizeRedirectToParam(authorizeSupabaseUrl: string): string | null {
+  try {
+    return new URL(authorizeSupabaseUrl).searchParams.get("redirect_to");
+  } catch {
+    return null;
+  }
 }
 
 /** Avoid duplicate exchangeCodeForSession for the same authorization code (e.g. retry / race). */
@@ -1154,7 +1165,13 @@ export default function App() {
         scheme: "zyra",
         path: "auth/callback",
       });
-      console.log("redirectTo value:", redirectTo);
+      console.log("[mobile auth] redirectTo:", redirectTo);
+
+      if (redirectTo.includes(FORBIDDEN_GOOGLE_REDIRECT_MARKER)) {
+        console.log("[mobile auth] blocked web redirect_uri for native Google OAuth");
+        throw new Error("Google OAuth must use an Expo/native redirect URI, not the web app.");
+      }
+
       armGoogleOAuthRedirect(redirectTo);
       googleRedirectArmed = true;
 
@@ -1163,6 +1180,8 @@ export default function App() {
         options: {
           redirectTo,
           skipBrowserRedirect: true,
+          /* GoTrue skips forwarding skipBrowserRedirect into the URL query; include explicitly for native OAuth. */
+          queryParams: { skip_http_redirect: "true" },
         },
       });
       if (error) {
@@ -1171,6 +1190,15 @@ export default function App() {
       }
       console.log("Google auth started");
       if (!data?.url) throw new Error("Google auth URL is missing.");
+
+      const fromUrl = authorizeRedirectToParam(data.url);
+      console.log("[mobile auth] authorize redirect_to (from oauth url):", fromUrl ?? "(missing)");
+      if (fromUrl && fromUrl !== redirectTo) {
+        console.log("[mobile auth] warning: authorize redirect_to does not equal makeRedirectUri (check Supabase allowlist)");
+      }
+      if (fromUrl?.includes(FORBIDDEN_GOOGLE_REDIRECT_MARKER)) {
+        console.log("[mobile auth] authorize URL still targets web callback — whitelist Expo redirectTo in Supabase");
+      }
 
       WebBrowser.maybeCompleteAuthSession();
 
