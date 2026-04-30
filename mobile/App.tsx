@@ -57,7 +57,7 @@ const navTheme = {
   },
 };
 
-const AUTH_REDIRECT_TO = process.env.EXPO_PUBLIC_AUTH_REDIRECT_TO ?? "zyra://auth/callback";
+const AUTH_REDIRECT_TO = "zyra://auth/callback";
 const AUTH_RESET_REDIRECT_TO = process.env.EXPO_PUBLIC_AUTH_RESET_REDIRECT_TO ?? "zyra://auth/reset-password";
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
@@ -801,9 +801,18 @@ export default function App() {
         console.log("[mobile auth] Authorization header exists:", false);
         return null;
       }
+      const rawToken = String(data.session.access_token).trim();
+      const token = rawToken.replace(/^Bearer\s+/i, "").trim();
+      const tokenParts = token.split(".");
+      console.log("[mobile auth] token has 3 parts:", tokenParts.length === 3);
+      console.log("[mobile auth] token starts with eyJ:", token.startsWith("eyJ"));
+      if (tokenParts.length !== 3 || !token.startsWith("eyJ")) {
+        console.log("[mobile auth] Authorization header exists:", false);
+        return null;
+      }
       console.log("[mobile auth] Authorization header exists:", true);
       return {
-        Authorization: `Bearer ${data.session.access_token}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       };
     };
@@ -820,7 +829,7 @@ export default function App() {
     let mounted = true;
 
     async function handleAuthRedirectUrl(url: string | null) {
-      console.log("[mobile auth] callback url received:", Boolean(url));
+      console.log("callback received");
       if (!url) return;
       if (!url.startsWith("zyra://auth/callback") && !url.startsWith("zyra://auth/reset-password")) return;
       const params = extractParamsFromUrl(url);
@@ -837,9 +846,15 @@ export default function App() {
       }
 
       try {
+        console.log("code exists:", Boolean(code));
+        console.log("access token exists:", Boolean(accessToken));
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
+          const { data: sessionData } = await supabase.auth.getSession();
+          const hasSession = Boolean(sessionData.session);
+          console.log("session created:", hasSession);
+          if (hasSession) setSession(sessionData.session);
           return;
         }
         if (accessToken && refreshToken) {
@@ -848,6 +863,10 @@ export default function App() {
             refresh_token: refreshToken,
           });
           if (error) throw error;
+          const { data: sessionData } = await supabase.auth.getSession();
+          const hasSession = Boolean(sessionData.session);
+          console.log("session created:", hasSession);
+          if (hasSession) setSession(sessionData.session);
           if (type === "recovery" || url.startsWith("zyra://auth/reset-password")) {
             setRecoveryMode(true);
           }
@@ -857,7 +876,7 @@ export default function App() {
           setAuthError("Email confirmed. Please sign in to continue.");
         }
       } catch (error) {
-        console.log("[mobile auth] callback error:", error instanceof Error ? error.message : "unknown callback error");
+        console.log(error instanceof Error ? error.message : "unknown callback error");
         setAuthError(error instanceof Error ? error.message : "Could not complete email confirmation.");
       }
     }
@@ -893,6 +912,13 @@ export default function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (session) {
+      console.log("navigation triggered");
+    }
+  }, [authLoading, session]);
 
   async function handleAuthSubmit(name: string, email: string, password: string) {
     if (!email || !password) {
@@ -965,12 +991,14 @@ export default function App() {
       console.log("Google auth started");
       if (!data?.url) throw new Error("Google auth URL is missing.");
       const res = await WebBrowser.openAuthSessionAsync(data.url, AUTH_REDIRECT_TO);
-      console.log("Callback received");
+      console.log("callback received");
       if (res.type !== "success" || !res.url) return;
       const params = extractParamsFromUrl(res.url);
       const code = params.get("code");
       const accessToken = params.get("access_token");
       const refreshToken = params.get("refresh_token");
+      console.log("code exists:", Boolean(code));
+      console.log("access token exists:", Boolean(accessToken));
       if (code) {
         const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeErr) throw exchangeErr;
@@ -982,7 +1010,9 @@ export default function App() {
         if (setErr) throw setErr;
       }
       const { data: sessionData } = await supabase.auth.getSession();
-      console.log(`Session created: ${Boolean(sessionData.session)}`);
+      const hasSession = Boolean(sessionData.session);
+      console.log("session created:", hasSession);
+      if (hasSession) setSession(sessionData.session);
     } catch (error) {
       console.log(error instanceof Error ? error.message : "Google auth error");
       setAuthError(error instanceof Error ? error.message : "Google sign in failed.");
