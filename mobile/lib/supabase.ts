@@ -15,6 +15,7 @@ if (!env.isConfigured) {
 
 export const supabase = createClient(env.url, env.anonKey, {
   auth: {
+    flowType: "pkce",
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,

@@ -1,9 +1,10 @@
 import { StatusBar } from "expo-status-bar";
+import * as AuthSession from "expo-auth-session";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import { createNavigationContainerRef, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Session } from "@supabase/supabase-js";
@@ -33,6 +34,8 @@ type TabParamList = {
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
+const rootNavigationRef = createNavigationContainerRef<TabParamList>();
+
 const colors = {
   bg: "#FFF9F2",
   card: "#FFF4EA",
@@ -57,11 +60,154 @@ const navTheme = {
   },
 };
 
+/** Email signup / magic-link confirmations (unchanged). Not used for Google OAuth redirect in Expo Go. */
 const AUTH_REDIRECT_TO = "zyra://auth/callback";
 const AUTH_RESET_REDIRECT_TO = process.env.EXPO_PUBLIC_AUTH_RESET_REDIRECT_TO ?? "zyra://auth/reset-password";
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
 WebBrowser.maybeCompleteAuthSession();
+
+/** Set while a Google OAuth session is armed (Expo AuthSession URI may differ from zyra://). */
+let googleOAuthRedirectToLatest: string | null = null;
+
+function oauthUrlMatchesRedirect(candidateFullUrl: string, redirectBase: string): boolean {
+  const base = redirectBase.replace(/\/+$/, "").toLowerCase();
+  const c = candidateFullUrl.trim().toLowerCase();
+  if (!base.length) return false;
+  return c === base || c.startsWith(`${base}?`) || c.startsWith(`${base}#`);
+}
+
+/** Returns matched redirect anchor if URL is OAuth callback for email confirmations or recent Google OAuth. */
+function oauthCallbackAnchorForIncomingUrl(candidate: string): string | null {
+  if (oauthUrlMatchesRedirect(candidate, AUTH_REDIRECT_TO)) return AUTH_REDIRECT_TO;
+  if (googleOAuthRedirectToLatest && oauthUrlMatchesRedirect(candidate, googleOAuthRedirectToLatest)) {
+    return googleOAuthRedirectToLatest;
+  }
+  return null;
+}
+
+function armGoogleOAuthRedirect(redirectTo: string) {
+  googleOAuthRedirectToLatest = redirectTo;
+}
+
+function endGoogleOAuthRedirectArm(timeoutMs = 15_000) {
+  setTimeout(() => {
+    googleOAuthRedirectToLatest = null;
+  }, timeoutMs);
+}
+
+/** Avoid duplicate exchangeCodeForSession for the same authorization code (e.g. retry / race). */
+const recentOAuthAuthorizationCodes = new Set<string>();
+
+function trimOAuthCodesSet(max: number) {
+  while (recentOAuthAuthorizationCodes.size > max) {
+    const first = recentOAuthAuthorizationCodes.values().next().value as string | undefined;
+    if (first === undefined) break;
+    recentOAuthAuthorizationCodes.delete(first);
+  }
+}
+
+type GoogleOAuthFlow = "code" | "token" | "none";
+
+/** Parse callback with URL + handle code (query) vs token (hash) flow. Does not log tokens. */
+async function finalizeGoogleOAuthRedirect(
+  redirectUrl: string | null | undefined,
+): Promise<{ session: Session | null; authErrorMessage?: string; flow: GoogleOAuthFlow }> {
+  const oauthAnchor = redirectUrl ? oauthCallbackAnchorForIncomingUrl(redirectUrl) : null;
+  if (!redirectUrl || !oauthAnchor) {
+    return { session: null, flow: "none" };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(redirectUrl);
+  } catch {
+    return { session: null, authErrorMessage: "Invalid callback URL.", flow: "none" };
+  }
+
+  const oauthErrRaw = parsed.searchParams.get("error_description") ?? parsed.searchParams.get("error");
+  if (oauthErrRaw) {
+    const msg = decodeURIComponent(oauthErrRaw.replace(/\+/g, " "));
+    console.log("auth error message:", msg);
+    return { session: null, authErrorMessage: msg, flow: "none" };
+  }
+
+  const code = parsed.searchParams.get("code");
+  const hashBody = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+  const hashParams = hashBody ? new URLSearchParams(hashBody) : new URLSearchParams();
+  const accessInHash = parsed.hash.includes("access_token");
+  const accessToken = accessInHash
+    ? (hashParams.get("access_token") ?? "").trim()
+    : (parsed.searchParams.get("access_token") ?? "").trim();
+  const refreshToken = accessInHash
+    ? (hashParams.get("refresh_token") ?? "").trim()
+    : (parsed.searchParams.get("refresh_token") ?? "").trim();
+
+  console.log("callback received");
+  console.log("code exists:", Boolean(code));
+  console.log("access_token exists:", Boolean(accessToken));
+
+  let flow: GoogleOAuthFlow = "none";
+
+  try {
+    if (code) {
+      flow = "code";
+      if (recentOAuthAuthorizationCodes.has(code)) {
+        const { data: repeat } = await supabase.auth.getSession();
+        const session = repeat.session ?? null;
+        console.log("session created:", Boolean(session));
+        return { session, flow: "code" };
+      }
+      recentOAuthAuthorizationCodes.add(code);
+      trimOAuthCodesSet(16);
+      const exchangeRes = await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeRes.error) {
+        console.log("exchange error message:", exchangeRes.error.message);
+        return { session: null, authErrorMessage: exchangeRes.error.message, flow: "code" };
+      }
+      const { data: afterExchange } = await supabase.auth.getSession();
+      console.log("session exists after exchange:", Boolean(afterExchange?.session));
+    } else if (accessToken && refreshToken) {
+      flow = "token";
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (error) {
+        console.log("auth error message:", error.message);
+        return { session: null, authErrorMessage: error.message, flow: "token" };
+      }
+    }
+
+    const {
+      data: { session },
+      error: sessionErr,
+    } = await supabase.auth.getSession();
+    if (sessionErr) {
+      console.log("auth error message:", sessionErr.message);
+      return { session: null, authErrorMessage: sessionErr.message, flow };
+    }
+    const created = Boolean(session);
+    console.log("session created:", created);
+    return { session: session ?? null, flow: created ? flow : "none" };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "oauth finalize failed";
+    console.log("auth error message:", message);
+    return { session: null, authErrorMessage: message, flow };
+  }
+}
+
+async function persistSessionIntoState(setSessionFn: (s: Session | null) => void): Promise<boolean> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.log("auth error message:", error.message);
+    return false;
+  }
+  const has = Boolean(data.session);
+  console.log("session created:", has);
+  if (has && data.session) setSessionFn(data.session);
+  return has;
+}
 
 function extractParamsFromUrl(url: string): URLSearchParams {
   const params = new URLSearchParams();
@@ -829,55 +975,61 @@ export default function App() {
     let mounted = true;
 
     async function handleAuthRedirectUrl(url: string | null) {
-      console.log("callback received");
+      console.log("callback URL received:", Boolean(url));
       if (!url) return;
-      if (!url.startsWith("zyra://auth/callback") && !url.startsWith("zyra://auth/reset-password")) return;
-      const params = extractParamsFromUrl(url);
+      const isReset = url.startsWith(AUTH_RESET_REDIRECT_TO);
+      const oauthAnchor = oauthCallbackAnchorForIncomingUrl(url);
+      if (!isReset && !oauthAnchor) return;
 
-      const code = params.get("code");
-      const accessToken = params.get("access_token");
-      const refreshToken = params.get("refresh_token");
-      const type = params.get("type");
-      const errorDescription = params.get("error_description");
-
-      if (errorDescription) {
-        setAuthError(decodeURIComponent(errorDescription));
+      /* Password-recovery deep link keeps existing behavior (not Google OAuth). */
+      if (isReset) {
+        const params = extractParamsFromUrl(url);
+        const errorDescription = params.get("error_description");
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+        const type = params.get("type");
+        if (errorDescription) {
+          setAuthError(decodeURIComponent(errorDescription.replace(/\+/g, " ")));
+          return;
+        }
+        try {
+          if (accessToken && refreshToken) {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (error) throw error;
+            await persistSessionIntoState(setSession);
+            setRecoveryMode(true);
+          }
+        } catch (error) {
+          console.log(error instanceof Error ? error.message : "unknown callback error");
+          setAuthError(error instanceof Error ? error.message : "Could not complete email confirmation.");
+        }
         return;
       }
 
-      try {
-        console.log("code exists:", Boolean(code));
-        console.log("access token exists:", Boolean(accessToken));
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          const { data: sessionData } = await supabase.auth.getSession();
-          const hasSession = Boolean(sessionData.session);
-          console.log("session created:", hasSession);
-          if (hasSession) setSession(sessionData.session);
+      if (oauthAnchor) {
+        const legacyParams = extractParamsFromUrl(url);
+        const fin = await finalizeGoogleOAuthRedirect(url);
+        if (fin.authErrorMessage) {
+          setAuthError(fin.authErrorMessage);
           return;
         }
-        if (accessToken && refreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) throw error;
-          const { data: sessionData } = await supabase.auth.getSession();
-          const hasSession = Boolean(sessionData.session);
-          console.log("session created:", hasSession);
-          if (hasSession) setSession(sessionData.session);
-          if (type === "recovery" || url.startsWith("zyra://auth/reset-password")) {
+        if (fin.session) {
+          setSession(fin.session);
+          if (fin.flow !== "none") {
+            console.log("oauth flow:", fin.flow);
+          }
+          if (legacyParams.get("type") === "recovery") {
             setRecoveryMode(true);
           }
           return;
         }
+        const type = legacyParams.get("type");
         if (type === "signup") {
           setAuthError("Email confirmed. Please sign in to continue.");
         }
-      } catch (error) {
-        console.log(error instanceof Error ? error.message : "unknown callback error");
-        setAuthError(error instanceof Error ? error.message : "Could not complete email confirmation.");
       }
     }
 
@@ -914,10 +1066,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (authLoading) return;
-    if (session) {
-      console.log("navigation triggered");
+    if (authLoading || !session) return;
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 45;
+    function tryNavigateHome() {
+      if (cancelled) return;
+      if (rootNavigationRef.isReady()) {
+        rootNavigationRef.navigate("Home");
+        console.log("navigation triggered");
+        return;
+      }
+      attempts += 1;
+      if (attempts < maxAttempts) {
+        requestAnimationFrame(tryNavigateHome);
+      }
     }
+    requestAnimationFrame(tryNavigateHome);
+    return () => {
+      cancelled = true;
+    };
   }, [authLoading, session]);
 
   async function handleAuthSubmit(name: string, email: string, password: string) {
@@ -979,44 +1147,77 @@ export default function App() {
   async function handleGoogleAuth() {
     setAuthBusy(true);
     setAuthError(null);
+    const afterCallbackDeadline = () => Date.now() + 5000;
+    let googleRedirectArmed = false;
     try {
+      const redirectTo = AuthSession.makeRedirectUri({
+        scheme: "zyra",
+        path: "auth/callback",
+      });
+      console.log("redirectTo value:", redirectTo);
+      armGoogleOAuthRedirect(redirectTo);
+      googleRedirectArmed = true;
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: AUTH_REDIRECT_TO,
+          redirectTo,
           skipBrowserRedirect: true,
         },
       });
-      if (error) throw error;
+      if (error) {
+        console.log("auth error message:", error.message);
+        throw error;
+      }
       console.log("Google auth started");
       if (!data?.url) throw new Error("Google auth URL is missing.");
-      const res = await WebBrowser.openAuthSessionAsync(data.url, AUTH_REDIRECT_TO);
-      console.log("callback received");
-      if (res.type !== "success" || !res.url) return;
-      const params = extractParamsFromUrl(res.url);
-      const code = params.get("code");
-      const accessToken = params.get("access_token");
-      const refreshToken = params.get("refresh_token");
-      console.log("code exists:", Boolean(code));
-      console.log("access token exists:", Boolean(accessToken));
-      if (code) {
-        const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeErr) throw exchangeErr;
-      } else if (accessToken && refreshToken) {
-        const { error: setErr } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        if (setErr) throw setErr;
+
+      WebBrowser.maybeCompleteAuthSession();
+
+      const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      console.log("openAuthSession result type:", res.type);
+      const callbackUrl = res.type === "success" ? res.url ?? null : null;
+      console.log("result url exists:", Boolean(callbackUrl));
+
+      let fin = await finalizeGoogleOAuthRedirect(callbackUrl ?? undefined);
+      if (fin.flow !== "none") {
+        console.log("oauth flow:", fin.flow);
       }
-      const { data: sessionData } = await supabase.auth.getSession();
-      const hasSession = Boolean(sessionData.session);
-      console.log("session created:", hasSession);
-      if (hasSession) setSession(sessionData.session);
+
+      if (fin.authErrorMessage) {
+        setAuthError(fin.authErrorMessage);
+        return;
+      }
+
+      let sessionOut = fin.session;
+      const deadline = afterCallbackDeadline();
+      while (!sessionOut && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 150));
+        const { data: gd, error: gerr } = await supabase.auth.getSession();
+        if (gerr) {
+          console.log("auth error message:", gerr.message);
+        }
+        if (gd.session) {
+          sessionOut = gd.session;
+          break;
+        }
+      }
+
+      if (sessionOut) {
+        setSession(sessionOut);
+        console.log("session created:", true);
+      } else {
+        console.log("session created:", false);
+        setAuthError("Login failed, try again");
+      }
     } catch (error) {
-      console.log(error instanceof Error ? error.message : "Google auth error");
+      const msg = error instanceof Error ? error.message : "Google auth error";
+      console.log("auth error message:", msg);
       setAuthError(error instanceof Error ? error.message : "Google sign in failed.");
     } finally {
+      if (googleRedirectArmed) {
+        endGoogleOAuthRedirectArm(15_000);
+      }
       setAuthBusy(false);
     }
   }
@@ -1110,7 +1311,7 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={rootNavigationRef} theme={navTheme}>
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerStyle: { backgroundColor: "#FFFDF9" },
