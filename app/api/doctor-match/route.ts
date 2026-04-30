@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import Groq from "groq-sdk";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
@@ -19,37 +20,67 @@ function extractJsonObject(text: string): string | null {
   return null;
 }
 
+function getBearerToken(request: Request): string | null {
+  const auth = request.headers.get("authorization") ?? request.headers.get("Authorization");
+  if (!auth) return null;
+  const [scheme, token] = auth.split(/\s+/, 2);
+  if (!scheme || !token || scheme.toLowerCase() !== "bearer") return null;
+  return token.trim() || null;
+}
+
+async function createSupabaseForRequest(request: Request) {
+  const { url, anonKey, isConfigured } = getSupabasePublicEnv();
+  if (!isConfigured) return { error: Response.json({ error: "App is not fully configured." }, { status: 503 }) };
+
+  const bearer = getBearerToken(request);
+  if (bearer) {
+    const supabase = createClient(url, anonKey, {
+      global: { headers: { Authorization: `Bearer ${bearer}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase.auth.getUser(bearer);
+    if (error || !data.user) {
+      return { error: Response.json({ error: "Sign in to use DoctorMatch AI." }, { status: 401 }) };
+    }
+    return { supabase, user: data.user };
+  }
+
+  const cookieStore = await cookies();
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
+        } catch {
+          /* session refresh from Route Handler */
+        }
+      },
+    },
+  });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: Response.json({ error: "Sign in to use DoctorMatch AI." }, { status: 401 }) };
+  return { supabase, user };
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: { Allow: "POST, OPTIONS" },
+  });
+}
+
 export async function POST(request: Request) {
   try {
-    const { url, anonKey, isConfigured } = getSupabasePublicEnv();
-    if (!isConfigured) {
-      return Response.json({ error: "App is not fully configured." }, { status: 503 });
-    }
-
-    const cookieStore = await cookies();
-    const supabase = createServerClient(url, anonKey, {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
-            );
-          } catch {
-            /* session refresh from Route Handler */
-          }
-        },
-      },
-    });
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return Response.json({ error: "Sign in to use DoctorMatch AI." }, { status: 401 });
-    }
+    const resolved = await createSupabaseForRequest(request);
+    if ("error" in resolved) return resolved.error;
+    const { supabase, user } = resolved;
 
     const apiKey = process.env.GROQ_API_KEY?.trim();
     if (!apiKey) {
@@ -122,6 +153,20 @@ ${symptoms}`;
       parsed = JSON.parse(jsonString);
     } catch {
       return Response.json({ error: "Could not parse DoctorMatch response." }, { status: 502 });
+    }
+
+    const record = parsed as { pattern?: unknown; specialist?: unknown };
+    const pattern = String(record.pattern ?? "").trim();
+    const specialist = String(record.specialist ?? "").trim();
+
+    const { error: historyError } = await supabase.from("doctor_match_history").insert({
+      user_id: user.id,
+      symptoms,
+      pattern,
+      specialist,
+    });
+    if (historyError) {
+      console.error("[api/doctor-match] doctor_match_history insert:", historyError.message);
     }
 
     return Response.json({ recommendation: parsed });

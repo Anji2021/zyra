@@ -100,8 +100,8 @@ export async function saveOnboardingProfile(
     last_period_start = lastPeriod;
   }
 
-  /** Matches `public.profiles` columns; no `undefined` (PostgREST can reject unknown keys). */
-  const row: {
+  /** Core demographics + onboarding arrays on `profiles`. Structured Clarity fields save from Profile (see `user_health_profile`). */
+  const profilesRow: {
     id: string;
     full_name: string;
     age: number;
@@ -111,6 +111,7 @@ export async function saveOnboardingProfile(
     cycle_regular: boolean;
     average_cycle_length: number | null;
     last_period_start: string | null;
+    updated_at: string;
   } = {
     id: user.id,
     full_name,
@@ -121,21 +122,23 @@ export async function saveOnboardingProfile(
     cycle_regular,
     average_cycle_length,
     last_period_start,
+    updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase.from("profiles").upsert(row, {
+  const { error: profilesErr } = await supabase.from("profiles").upsert(profilesRow, {
     onConflict: "id",
     ignoreDuplicates: false,
   });
 
-  if (error) {
-    logSupabaseError("profiles.upsert", error);
+  if (profilesErr) {
+    logSupabaseError("profiles.upsert", profilesErr);
     return {
       error: "We could not save your profile just yet. Check your connection, or try again in a moment.",
     };
   }
 
   revalidatePath("/app");
+  revalidatePath("/app/profile");
   revalidatePath("/onboarding");
   redirect("/app");
 }

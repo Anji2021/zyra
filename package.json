@@ -2,11 +2,18 @@
   "name": "zyra",
   "version": "0.1.0",
   "private": true,
+  "workspaces": ["mobile", "shared"],
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "dev:web": "next dev",
+    "dev:mobile": "npm run start --workspace mobile"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
@@ -14,8 +21,8 @@
     "groq-sdk": "^1.1.2",
     "lucide-react": "^1.11.0",
     "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {

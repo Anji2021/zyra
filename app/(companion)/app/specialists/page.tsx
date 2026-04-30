@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { SpecialistsSearch } from "./specialists-search";
 import { fetchCyclesForUser } from "@/lib/cycles/queries";
+import { fetchDoctorMatchHistoryForUser } from "@/lib/specialists/doctor-match-history-queries";
 import { fetchSavedSpecialistsForUser } from "@/lib/specialists/saved-queries";
 import { fetchSymptomsForUser } from "@/lib/symptoms/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -17,10 +18,11 @@ export default async function SpecialistsPage() {
     redirect("/?auth=required");
   }
 
-  const [savedRows, cyclesProbe, symptomsProbe] = await Promise.all([
+  const [savedRows, cyclesProbe, symptomsProbe, doctorMatchHistory] = await Promise.all([
     fetchSavedSpecialistsForUser(supabase, user.id),
     fetchCyclesForUser(supabase, user.id, 1),
     fetchSymptomsForUser(supabase, user.id, 1),
+    fetchDoctorMatchHistoryForUser(supabase, user.id, 5),
   ]);
 
   const initialSavedPlaceIds = savedRows
@@ -34,6 +36,7 @@ export default async function SpecialistsPage() {
       <SpecialistsSearch
         initialSavedPlaceIds={initialSavedPlaceIds}
         hasHealthContext={hasHealthContext}
+        recentInsights={doctorMatchHistory}
       />
     </div>
   );

@@ -1,25 +1,10 @@
 import type { SpecialistTypeValue } from "./search-query";
+import type {
+  DoctorMatchApiShape,
+  SharedDoctorMatchRecommendation,
+} from "@shared/doctor-match/types";
 
-export type DoctorMatchRecommendation = {
-  pattern: string;
-  specialist: string;
-  reason: string;
-  carePath: string[];
-  questionsToAsk: string[];
-  urgentCareWarning: string;
-  searchTerm: string;
-  specialistType: SpecialistTypeValue;
-};
-
-type DoctorMatchApiShape = {
-  pattern?: unknown;
-  specialist?: unknown;
-  reason?: unknown;
-  carePath?: unknown;
-  questionsToAsk?: unknown;
-  urgentCareWarning?: unknown;
-  searchTerm?: unknown;
-};
+export type DoctorMatchRecommendation = SharedDoctorMatchRecommendation<SpecialistTypeValue>;
 
 function hasAny(input: string, terms: string[]): boolean {
   return terms.some((term) => input.includes(term));

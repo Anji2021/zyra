@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { buildGoogleMapsUrl } from "@/lib/specialists/maps-url";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
@@ -20,37 +21,66 @@ type PlaceSearchResult = {
   opening_hours?: { open_now?: boolean };
 };
 
+function getBearerToken(request: Request): string | null {
+  const auth = request.headers.get("authorization") ?? request.headers.get("Authorization");
+  if (!auth) return null;
+  const [scheme, token] = auth.split(/\s+/, 2);
+  if (!scheme || !token || scheme.toLowerCase() !== "bearer") return null;
+  return token.trim() || null;
+}
+
+async function createSupabaseForRequest(request: Request) {
+  const { url, anonKey, isConfigured } = getSupabasePublicEnv();
+  if (!isConfigured) return { error: Response.json({ error: "App is not fully configured." }, { status: 503 }) };
+
+  const bearer = getBearerToken(request);
+  if (bearer) {
+    const supabase = createClient(url, anonKey, {
+      global: { headers: { Authorization: `Bearer ${bearer}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase.auth.getUser(bearer);
+    if (error || !data.user) {
+      return { error: Response.json({ error: "Sign in to search for specialists." }, { status: 401 }) };
+    }
+    return { supabase, user: data.user };
+  }
+
+  const cookieStore = await cookies();
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
+        } catch {
+          /* session refresh from Route Handler */
+        }
+      },
+    },
+  });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: Response.json({ error: "Sign in to search for specialists." }, { status: 401 }) };
+  return { supabase, user };
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: { Allow: "POST, OPTIONS" },
+  });
+}
+
 export async function POST(request: Request) {
   try {
-    const { url, anonKey, isConfigured } = getSupabasePublicEnv();
-    if (!isConfigured) {
-      return Response.json({ error: "App is not fully configured." }, { status: 503 });
-    }
-
-    const cookieStore = await cookies();
-    const supabase = createServerClient(url, anonKey, {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
-            );
-          } catch {
-            /* session refresh from Route Handler */
-          }
-        },
-      },
-    });
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return Response.json({ error: "Sign in to search for specialists." }, { status: 401 });
-    }
+    const resolved = await createSupabaseForRequest(request);
+    if ("error" in resolved) return resolved.error;
 
     let body: unknown;
     try {

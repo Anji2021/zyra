@@ -7,6 +7,8 @@ import {
   recommendSpecialistFromSymptoms,
   type DoctorMatchRecommendation,
 } from "@/lib/specialists/doctor-match";
+import { analyzeHistoryPatterns } from "@/lib/specialists/clarity-insight";
+import type { DoctorMatchHistoryRow } from "@/lib/specialists/doctor-match-history-queries";
 import {
   getSpecialistLabel,
   SPECIALIST_OPTIONS,
@@ -65,7 +67,14 @@ type SpecialistsSearchProps = {
   initialSavedPlaceIds: string[];
   /** When true, first cards can show a “good match” style badge */
   hasHealthContext: boolean;
+  recentInsights: DoctorMatchHistoryRow[];
 };
+
+function shortenText(text: string, maxChars: number) {
+  const t = text.trim();
+  if (t.length <= maxChars) return t;
+  return `${t.slice(0, maxChars - 1)}…`;
+}
 
 function StarsRow({ rating }: { rating: number }) {
   const full = Math.min(5, Math.max(0, Math.round(rating)));
@@ -144,7 +153,11 @@ function generateDoctorInsights(doctor: PlacesResult, context: DoctorInsightCont
   return { matchReason, qualitySignal, proximitySignal };
 }
 
-export function SpecialistsSearch({ initialSavedPlaceIds, hasHealthContext }: SpecialistsSearchProps) {
+export function SpecialistsSearch({
+  initialSavedPlaceIds,
+  hasHealthContext,
+  recentInsights,
+}: SpecialistsSearchProps) {
   const [location, setLocation] = useState("");
   const [specialistType, setSpecialistType] = useState<SpecialistTypeValue>("gynecologist");
   const [symptoms, setSymptoms] = useState<string[]>([]);
@@ -181,6 +194,11 @@ export function SpecialistsSearch({ initialSavedPlaceIds, hasHealthContext }: Sp
   useEffect(() => {
     if (error) console.error("[SpecialistsSearch]", error);
   }, [error]);
+
+  const claritySummary = useMemo(() => {
+    if (recentInsights.length < 3) return null;
+    return analyzeHistoryPatterns(recentInsights);
+  }, [recentInsights]);
 
   const visibleResults = useMemo(() => {
     if (!results) return null;
@@ -684,6 +702,48 @@ export function SpecialistsSearch({ initialSavedPlaceIds, hasHealthContext }: Sp
           )}
         </section>
       ) : null}
+
+      {claritySummary ? (
+        <section className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
+          <h2 className="text-sm font-semibold text-foreground">Clarity Insight</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">{claritySummary}</p>
+        </section>
+      ) : null}
+
+      <section className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
+        <h2 className="text-sm font-semibold text-foreground">Your recent insights</h2>
+        {recentInsights.length === 0 ? (
+          <p className="mt-2 text-sm text-muted">No insights yet. Generate your first match.</p>
+        ) : (
+          <ul className="mt-3 space-y-3 border-t border-border/60 pt-3">
+            {recentInsights.map((row) => (
+              <li key={row.id} className="text-sm">
+                <p className="text-xs text-muted">
+                  {new Date(row.created_at).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </p>
+                <p className="mt-1 text-foreground">
+                  <span className="text-muted">Symptoms: </span>
+                  {shortenText(row.symptoms, 100)}
+                </p>
+                {row.pattern.trim() ? (
+                  <p className="mt-0.5 text-muted">
+                    <span className="font-medium text-foreground/80">Pattern: </span>
+                    {shortenText(row.pattern, 120)}
+                  </p>
+                ) : null}
+                <p className="mt-0.5 text-muted">
+                  <span className="font-medium text-foreground/80">Specialist: </span>
+                  {row.specialist}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <details id="specialist-search-section" className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
         <summary className="cursor-pointer text-sm font-semibold text-foreground">
