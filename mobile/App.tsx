@@ -390,17 +390,18 @@ function DoctorMatchScreen({
     setLoading(true);
     setError(null);
     try {
-      const apiOptions = await getApiOptions();
-      if (!apiOptions) {
+      const apiOptionsForDoctorMatch = await getApiOptions();
+      if (!apiOptionsForDoctorMatch) {
         setError("Please sign in again.");
         return;
       }
-      const dm = await generateDoctorMatch({ symptoms: cleanSymptoms }, apiOptions);
+      const dm = await generateDoctorMatch({ symptoms: cleanSymptoms }, apiOptionsForDoctorMatch);
       setPattern(dm.recommendation.pattern || "No pattern available yet.");
       setSpecialist(dm.recommendation.specialist || "Specialist recommendation unavailable.");
 
       const specialistType = inferSpecialistTypeFromDoctorMatch(dm.recommendation);
-      if (!apiOptions.headers?.Authorization) {
+      const apiOptionsForSpecialists = await getApiOptions();
+      if (!apiOptionsForSpecialists?.headers?.Authorization) {
         setError("Please sign in again.");
         return;
       }
@@ -409,7 +410,7 @@ function DoctorMatchScreen({
           location: cleanLocation,
           specialistType,
         },
-        apiOptions,
+        apiOptionsForSpecialists,
       );
       setNearby(search.results);
     } catch (err) {
@@ -781,24 +782,37 @@ export default function App() {
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [recoveryPasswordVisible, setRecoveryPasswordVisible] = useState(false);
-  async function getProtectedApiOptions(): Promise<{ baseUrl: string; headers?: Record<string, string> } | null> {
+  async function getProtectedApiOptions(): Promise<{ baseUrl: string; headers?: Record<string, string>; getAuthHeaders: () => Promise<Record<string, string> | null> } | null> {
     const baseUrl = API_BASE_URL.trim();
     if (!baseUrl) return null;
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      console.log("[mobile auth] session exists: false");
-      return null;
-    }
-    const accessToken = data.session?.access_token;
-    const hasSession = Boolean(accessToken);
-    console.log("[mobile auth] session exists:", hasSession);
-    if (!accessToken) return null;
+    const getAuthHeaders = async (): Promise<Record<string, string> | null> => {
+      const { data, error } = await supabase.auth.getSession();
+      const sessionExists = Boolean(data.session);
+      const accessTokenExists = Boolean(data.session?.access_token);
+      if (error) {
+        console.log("[mobile auth] session exists:", false);
+        console.log("[mobile auth] access token exists:", false);
+        console.log("[mobile auth] Authorization header exists:", false);
+        return null;
+      }
+      console.log("[mobile auth] session exists:", sessionExists);
+      console.log("[mobile auth] access token exists:", accessTokenExists);
+      if (!data.session?.access_token) {
+        console.log("[mobile auth] Authorization header exists:", false);
+        return null;
+      }
+      console.log("[mobile auth] Authorization header exists:", true);
+      return {
+        Authorization: `Bearer ${data.session.access_token}`,
+        "Content-Type": "application/json",
+      };
+    };
+    const authHeaders = await getAuthHeaders();
+    if (!authHeaders) return null;
     return {
       baseUrl,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: authHeaders,
+      getAuthHeaders,
     };
   }
 
