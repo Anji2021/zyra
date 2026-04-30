@@ -73,6 +73,11 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const verify = url.searchParams.get("verify");
+  if (verify === "1") {
+    return Response.json({ ok: true, route: "profile" });
+  }
   try {
     const resolved = await createSupabaseForRequest(request);
     if ("error" in resolved) return resolved.error;
