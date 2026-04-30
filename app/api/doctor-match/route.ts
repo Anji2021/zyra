@@ -72,8 +72,12 @@ async function createSupabaseForRequest(request: Request) {
 export async function OPTIONS() {
   return new Response(null, {
     status: 204,
-    headers: { Allow: "POST, OPTIONS" },
+    headers: { Allow: "GET, POST, OPTIONS" },
   });
+}
+
+export async function GET() {
+  return Response.json({ ok: true, route: "doctor-match" });
 }
 
 export async function POST(request: Request) {
