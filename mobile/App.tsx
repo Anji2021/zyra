@@ -1,16 +1,31 @@
 import { StatusBar } from "expo-status-bar";
 import * as AuthSession from "expo-auth-session";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { createNavigationContainerRef, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useEffect, useState } from "react";
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Video, ResizeMode } from "expo-av";
+import { Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Session } from "@supabase/supabase-js";
 import {
   ApiClientError,
+  buildCarePrepScriptRequestBody,
+  buildFallbackCarePrepScript,
+  carePrepFallbackToVideoRequestBody,
+  isCarePrepVideoDemoFallbackResponse,
+  isCarePrepVideoPlayable,
+  mapCarePrepAiJsonToFallback,
+  parseCarePrepAiJsonResponse,
+  parseCarePrepVideoGenerationResponse,
+  resolveCarePrepVideoJobId,
+  type CarePrepVideoFallback,
+  type CarePrepVideoGenerationResponse,
+  type CarePrepVideoProvider,
   type CycleRow,
+  type DoctorMatchRecommendation,
   type HealthProfile,
   type MedicineRow,
   type NearbySpecialist,
@@ -70,7 +85,7 @@ const FORBIDDEN_GOOGLE_REDIRECT_MARKER = "zyra-gold.vercel.app";
 
 WebBrowser.maybeCompleteAuthSession();
 
-/** Set while a Google OAuth session is armed (Expo AuthSession URI may differ from zyra://). */
+/** Set while Google OAuth is in flight (deeplink may arrive after WebBrowser resolves). */
 let googleOAuthRedirectToLatest: string | null = null;
 
 function oauthUrlMatchesRedirect(candidateFullUrl: string, redirectBase: string): boolean {
@@ -104,6 +119,17 @@ function authorizeRedirectToParam(authorizeSupabaseUrl: string): string | null {
     return new URL(authorizeSupabaseUrl).searchParams.get("redirect_to");
   } catch {
     return null;
+  }
+}
+
+/** True if Supabase would send the user back to the production Next.js OAuth page (wrong store for mobile PKCE). */
+function isZyraWebAuthCallbackRedirect(redirectToParam: string): boolean {
+  if (redirectToParam.includes(FORBIDDEN_GOOGLE_REDIRECT_MARKER)) return true;
+  try {
+    const u = new URL(redirectToParam);
+    return u.hostname === "zyra-gold.vercel.app" && u.pathname.replace(/\/+$/, "") === "/auth/callback";
+  } catch {
+    return false;
   }
 }
 
@@ -155,7 +181,7 @@ async function finalizeGoogleOAuthRedirect(
     : (parsed.searchParams.get("refresh_token") ?? "").trim();
 
   console.log("callback received");
-  console.log("code exists:", Boolean(code));
+  console.log("[mobile auth] code exists:", Boolean(code));
   console.log("access_token exists:", Boolean(accessToken));
 
   let flow: GoogleOAuthFlow = "none";
@@ -173,11 +199,11 @@ async function finalizeGoogleOAuthRedirect(
       trimOAuthCodesSet(16);
       const exchangeRes = await supabase.auth.exchangeCodeForSession(code);
       if (exchangeRes.error) {
-        console.log("exchange error message:", exchangeRes.error.message);
+        console.log("[mobile auth] exchange error message:", exchangeRes.error.message);
         return { session: null, authErrorMessage: exchangeRes.error.message, flow: "code" };
       }
       const { data: afterExchange } = await supabase.auth.getSession();
-      console.log("session exists after exchange:", Boolean(afterExchange?.session));
+      console.log("[mobile auth] session exists after exchange:", Boolean(afterExchange?.session));
     } else if (accessToken && refreshToken) {
       flow = "token";
       const { error } = await supabase.auth.setSession({
@@ -523,6 +549,72 @@ function HealthScreen() {
   );
 }
 
+const CARE_PREP_VIDEO_UNAVAILABLE_MSG =
+  "Video generation is unavailable right now. You can still use the script for your demo.";
+
+function sleepMs(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollCarePrepVideoTaskMobile(
+  base: string,
+  jobId: string,
+  headers: Record<string, string>,
+  provider: CarePrepVideoProvider,
+): Promise<CarePrepVideoGenerationResponse | null> {
+  const POLL_INTERVAL_MS = 5000;
+  const POLL_MAX_ATTEMPTS = 12;
+  const qs = new URLSearchParams({ jobId, provider });
+
+  for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
+    try {
+      const res = await fetch(`${base.replace(/\/+$/, "")}/api/careprep-video/status?${qs.toString()}`, {
+        headers: { ...headers },
+      });
+      let json: unknown;
+      try {
+        json = await res.json();
+      } catch {
+        await sleepMs(POLL_INTERVAL_MS);
+        continue;
+      }
+      const parsed = parseCarePrepVideoGenerationResponse(json);
+      if (!parsed) {
+        await sleepMs(POLL_INTERVAL_MS);
+        continue;
+      }
+      if (isCarePrepVideoPlayable(parsed)) return parsed;
+      if (parsed.status === "failed") return parsed;
+    } catch {
+      /* retry */
+    }
+    await sleepMs(POLL_INTERVAL_MS);
+  }
+  return null;
+}
+
+async function mirrorCarePrepVideoToButterbaseMobile(
+  base: string,
+  headers: Record<string, string>,
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    const url = `${base.replace(/\/+$/, "")}/api/careprep/butterbase`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json()) as { butterbaseSaved?: boolean };
+    return data?.butterbaseSaved === true;
+  } catch {
+    return false;
+  }
+}
+
 function DoctorMatchScreen({
   getApiOptions,
 }: {
@@ -535,6 +627,17 @@ function DoctorMatchScreen({
   const [pattern, setPattern] = useState<string | null>(null);
   const [specialist, setSpecialist] = useState<string | null>(null);
   const [nearby, setNearby] = useState<NearbySpecialist[]>([]);
+  const [dmRecommendation, setDmRecommendation] = useState<DoctorMatchRecommendation | null>(null);
+  const [carePrepScript, setCarePrepScript] = useState<CarePrepVideoFallback | null>(null);
+  const [carePrepLoading, setCarePrepLoading] = useState(false);
+  const [carePrepVideoLoading, setCarePrepVideoLoading] = useState(false);
+  const [carePrepVideoUrl, setCarePrepVideoUrl] = useState<string | null>(null);
+  const [carePrepVideoDemoPreview, setCarePrepVideoDemoPreview] = useState(false);
+  const [carePrepVideoSeedanceError, setCarePrepVideoSeedanceError] = useState<string | null>(null);
+  const [carePrepVideoJobId, setCarePrepVideoJobId] = useState<string | null>(null);
+  const [carePrepVideoPollProvider, setCarePrepVideoPollProvider] = useState<CarePrepVideoProvider | null>(null);
+  const [carePrepImaRouterHint, setCarePrepImaRouterHint] = useState<string | null>(null);
+  const [carePrepButterbaseSaved, setCarePrepButterbaseSaved] = useState(false);
 
   async function handleGenerateMatch() {
     const cleanSymptoms = symptoms.trim();
@@ -546,6 +649,15 @@ function DoctorMatchScreen({
 
     setLoading(true);
     setError(null);
+    setDmRecommendation(null);
+    setCarePrepScript(null);
+    setCarePrepVideoUrl(null);
+    setCarePrepVideoDemoPreview(false);
+    setCarePrepVideoSeedanceError(null);
+    setCarePrepVideoJobId(null);
+    setCarePrepVideoPollProvider(null);
+    setCarePrepImaRouterHint(null);
+    setCarePrepButterbaseSaved(false);
     try {
       const apiOptionsForDoctorMatch = await getApiOptions();
       if (!apiOptionsForDoctorMatch) {
@@ -553,6 +665,7 @@ function DoctorMatchScreen({
         return;
       }
       const dm = await generateDoctorMatch({ symptoms: cleanSymptoms }, apiOptionsForDoctorMatch);
+      setDmRecommendation(dm.recommendation);
       setPattern(dm.recommendation.pattern || "No pattern available yet.");
       setSpecialist(dm.recommendation.specialist || "Specialist recommendation unavailable.");
 
@@ -575,8 +688,208 @@ function DoctorMatchScreen({
         err instanceof ApiClientError ? err.message : "Could not generate a DoctorMatch right now.";
       setError(message);
       setNearby([]);
+      setDmRecommendation(null);
+      setCarePrepScript(null);
+      setCarePrepVideoUrl(null);
+      setCarePrepVideoDemoPreview(false);
+      setCarePrepVideoSeedanceError(null);
+      setCarePrepVideoJobId(null);
+      setCarePrepVideoPollProvider(null);
+      setCarePrepImaRouterHint(null);
+      setCarePrepButterbaseSaved(false);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCarePrepGenerate() {
+    if (!dmRecommendation) return;
+    const symptomsText = symptoms.trim();
+    const fallback = () =>
+      buildFallbackCarePrepScript({
+        symptomsText,
+        recommendation: dmRecommendation,
+      });
+
+    setCarePrepVideoUrl(null);
+    setCarePrepVideoDemoPreview(false);
+    setCarePrepVideoSeedanceError(null);
+    setCarePrepVideoJobId(null);
+    setCarePrepVideoPollProvider(null);
+    setCarePrepImaRouterHint(null);
+    setCarePrepButterbaseSaved(false);
+    setCarePrepLoading(true);
+    try {
+      const api = await getApiOptions();
+      if (!api?.baseUrl?.trim()) {
+        setCarePrepScript(fallback());
+        return;
+      }
+      const base = api.baseUrl.trim().replace(/\/+$/, "");
+
+      const res = await fetch(`${base}/api/careprep-script`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(api.headers ?? {}),
+        },
+        body: JSON.stringify(buildCarePrepScriptRequestBody({ symptomsText, recommendation: dmRecommendation })),
+      });
+
+      let json: unknown;
+      try {
+        json = await res.json();
+      } catch {
+        setCarePrepScript(fallback());
+        return;
+      }
+
+      const ai = parseCarePrepAiJsonResponse(json);
+      if (res.ok && ai) {
+        setCarePrepScript(mapCarePrepAiJsonToFallback(ai));
+        const raw = json as Record<string, unknown>;
+        if (raw.butterbaseSaved === true) setCarePrepButterbaseSaved(true);
+        return;
+      }
+
+      setCarePrepScript(fallback());
+    } catch {
+      setCarePrepScript(fallback());
+    } finally {
+      setCarePrepLoading(false);
+    }
+  }
+
+  async function handleCarePrepVideoGenerate() {
+    if (!carePrepScript || !dmRecommendation) return;
+    const symptomsText = symptoms.trim();
+    const videoMirrorPayload = () => ({
+      symptoms: symptomsText,
+      pattern: typeof dmRecommendation.pattern === "string" ? dmRecommendation.pattern : "",
+      specialist: typeof dmRecommendation.specialist === "string" ? dmRecommendation.specialist : "",
+      title: carePrepScript.videoTitle,
+      narration: carePrepScript.narrationScript,
+      visualPrompt: carePrepScript.visualDirection,
+      checklist:
+        carePrepScript.doctorVisitChecklist.length > 0 ? carePrepScript.doctorVisitChecklist : ["—"],
+      videoStatus: "ready",
+      createdAt: new Date().toISOString(),
+    });
+
+    setCarePrepVideoDemoPreview(false);
+    setCarePrepVideoSeedanceError(null);
+    setCarePrepVideoUrl(null);
+    setCarePrepVideoJobId(null);
+    setCarePrepVideoPollProvider(null);
+    setCarePrepImaRouterHint(null);
+    setCarePrepVideoLoading(true);
+    let demoFallback = false;
+    try {
+      const api = await getApiOptions();
+      if (!api?.baseUrl?.trim()) {
+        demoFallback = true;
+        setCarePrepVideoSeedanceError(CARE_PREP_VIDEO_UNAVAILABLE_MSG);
+        return;
+      }
+      const base = api.baseUrl.trim().replace(/\/+$/, "");
+      const hdrs = {
+        "Content-Type": "application/json",
+        ...(api.headers ?? {}),
+      };
+
+      const res = await fetch(`${base}/api/careprep-video`, {
+        method: "POST",
+        headers: hdrs,
+        body: JSON.stringify(
+          carePrepFallbackToVideoRequestBody(carePrepScript, {
+            symptomsText,
+            pattern: dmRecommendation.pattern ?? "",
+            specialist: dmRecommendation.specialist ?? "",
+          }),
+        ),
+      });
+
+      let json: unknown;
+      try {
+        json = await res.json();
+      } catch {
+        setCarePrepVideoDemoPreview(true);
+        setCarePrepVideoSeedanceError(CARE_PREP_VIDEO_UNAVAILABLE_MSG);
+        return;
+      }
+
+      const first = parseCarePrepVideoGenerationResponse(json);
+      if (!first) {
+        setCarePrepVideoDemoPreview(true);
+        setCarePrepVideoSeedanceError(CARE_PREP_VIDEO_UNAVAILABLE_MSG);
+        return;
+      }
+
+      if (isCarePrepVideoPlayable(first)) {
+        setCarePrepImaRouterHint(null);
+        setCarePrepVideoUrl(first.videoUrl);
+        setCarePrepVideoJobId(resolveCarePrepVideoJobId(first) || null);
+        setCarePrepVideoPollProvider(first.provider ?? null);
+        setCarePrepVideoDemoPreview(false);
+        setCarePrepVideoSeedanceError(null);
+        const raw = json as Record<string, unknown>;
+        if (raw.butterbaseSaved === true) setCarePrepButterbaseSaved(true);
+        return;
+      }
+
+      if (first.status === "failed") {
+        demoFallback = true;
+        setCarePrepImaRouterHint(
+          first.provider === "imarouter" && first.message.trim() ? first.message.trim() : null,
+        );
+        if (!isCarePrepVideoDemoFallbackResponse(first)) {
+          setCarePrepVideoSeedanceError(CARE_PREP_VIDEO_UNAVAILABLE_MSG);
+        }
+        return;
+      }
+
+      const pollProv: CarePrepVideoProvider = first.provider ?? "seedance";
+      setCarePrepVideoPollProvider(pollProv);
+
+      const jid = resolveCarePrepVideoJobId(first);
+      if (!jid) {
+        return;
+      }
+
+      setCarePrepVideoJobId(jid);
+
+      const polled = await pollCarePrepVideoTaskMobile(base, jid, api.headers ?? {}, pollProv);
+      if (polled && isCarePrepVideoPlayable(polled)) {
+        setCarePrepImaRouterHint(null);
+        setCarePrepVideoUrl(polled.videoUrl);
+        setCarePrepVideoJobId(resolveCarePrepVideoJobId(polled) || jid);
+        setCarePrepVideoDemoPreview(false);
+        setCarePrepVideoSeedanceError(null);
+        const mirrored = await mirrorCarePrepVideoToButterbaseMobile(base, api.headers ?? {}, {
+          ...videoMirrorPayload(),
+          videoUrl: polled.videoUrl,
+        });
+        if (mirrored) setCarePrepButterbaseSaved(true);
+        return;
+      }
+
+      if (polled?.status === "failed") {
+        demoFallback = true;
+        if (polled.provider === "imarouter" && polled.message.trim()) {
+          setCarePrepImaRouterHint(polled.message.trim());
+        }
+        if (!isCarePrepVideoDemoFallbackResponse(polled)) {
+          setCarePrepVideoSeedanceError(CARE_PREP_VIDEO_UNAVAILABLE_MSG);
+        }
+        return;
+      }
+    } catch {
+      /* no demo fallback unless API returned failed */
+    } finally {
+      setCarePrepVideoLoading(false);
+      if (demoFallback) {
+        setCarePrepVideoDemoPreview(true);
+      }
     }
   }
 
@@ -621,6 +934,104 @@ function DoctorMatchScreen({
               <Text style={styles.resultBody}>{pattern ?? "-"}</Text>
               <Text style={[styles.resultTitle, { marginTop: 10 }]}>Recommended specialist</Text>
               <Text style={styles.resultBody}>{specialist ?? "-"}</Text>
+            </View>
+          ) : null}
+
+          {dmRecommendation ? (
+            <View style={[styles.resultCard, styles.carePrepCard]}>
+              <Text style={styles.carePrepKicker}>Zyra CarePrep Video</Text>
+              <Text style={styles.carePrepSub}>
+                Turn your symptoms and specialist match into a short doctor-visit prep video.
+              </Text>
+              <TouchableOpacity
+                style={styles.carePrepButton}
+                activeOpacity={0.85}
+                onPress={() => void handleCarePrepGenerate()}
+                disabled={carePrepLoading}
+              >
+                <Text style={styles.carePrepButtonText}>
+                  {carePrepLoading ? "Please wait…" : "Generate CarePrep Script"}
+                </Text>
+              </TouchableOpacity>
+              {carePrepLoading ? (
+                <Text style={styles.carePrepLoadingText}>Generating your care-prep script…</Text>
+              ) : null}
+              <Text style={styles.carePrepDisclaimer}>
+                Educational only—not medical advice. Zyra does not diagnose.
+              </Text>
+              <View style={styles.carePrepOrchestrationBox}>
+                <Text style={styles.carePrepStackNote}>
+                  Stack: Z.AI for script reasoning · Seedance for video generation · ImaRouter for routing · Butterbase for demo storage/deployment.
+                </Text>
+              </View>
+              {carePrepButterbaseSaved ? (
+                <Text style={styles.carePrepButterbaseSaved}>Saved to Butterbase demo storage</Text>
+              ) : null}
+              {carePrepScript ? (
+                <View style={styles.carePrepOutput}>
+                  <Text style={styles.carePrepSectionLabel}>Video title</Text>
+                  <Text style={styles.carePrepSectionBody}>{carePrepScript.videoTitle}</Text>
+                  <Text style={[styles.carePrepSectionLabel, { marginTop: 10 }]}>Narration (~20–30s)</Text>
+                  <Text style={styles.carePrepSectionBody}>{carePrepScript.narrationScript}</Text>
+                  <Text style={[styles.carePrepSectionLabel, { marginTop: 10 }]}>Visual direction</Text>
+                  <Text style={styles.carePrepSectionBody}>{carePrepScript.visualDirection}</Text>
+                  <Text style={[styles.carePrepSectionLabel, { marginTop: 10 }]}>Doctor visit checklist</Text>
+                  {carePrepScript.doctorVisitChecklist.map((item, i) => (
+                    <Text key={`${i}-${item.slice(0, 24)}`} style={styles.carePrepBullet}>
+                      • {item}
+                    </Text>
+                  ))}
+                  <TouchableOpacity
+                    style={[styles.carePrepButton, { marginTop: 12 }]}
+                    activeOpacity={0.85}
+                    onPress={() => void handleCarePrepVideoGenerate()}
+                    disabled={carePrepVideoLoading}
+                  >
+                    <Text style={styles.carePrepButtonText}>
+                      {carePrepVideoLoading ? "Please wait…" : "Generate CarePrep Video"}
+                    </Text>
+                  </TouchableOpacity>
+                  {carePrepImaRouterHint ? (
+                    <Text style={styles.carePrepImaRouterHint}>{carePrepImaRouterHint}</Text>
+                  ) : null}
+                  {carePrepVideoLoading ? (
+                    <Text style={styles.carePrepLoadingText}>
+                      {carePrepVideoPollProvider === "imarouter" && carePrepVideoJobId
+                        ? "ImaRouter is generating your CarePrep video…"
+                        : carePrepVideoPollProvider === "seedance" && carePrepVideoJobId
+                          ? "Seedance video is processing…"
+                          : carePrepVideoJobId
+                            ? "Processing video…"
+                            : "Creating your CarePrep video…"}
+                    </Text>
+                  ) : null}
+                  {carePrepVideoUrl ? (
+                    <Video
+                      style={styles.carePrepVideoPlayer}
+                      source={{ uri: carePrepVideoUrl }}
+                      useNativeControls
+                      resizeMode={ResizeMode.CONTAIN}
+                      isLooping={false}
+                    />
+                  ) : null}
+                  {carePrepVideoSeedanceError ? (
+                    <Text style={styles.carePrepSeedanceError}>{carePrepVideoSeedanceError}</Text>
+                  ) : null}
+                  {carePrepVideoDemoPreview && carePrepScript ? (
+                    <View style={styles.carePrepDemoPreview}>
+                      <Text style={styles.carePrepDemoPreviewLabel}>Demo preview</Text>
+                      <Text style={styles.carePrepDemoPreviewTitle}>{carePrepScript.videoTitle}</Text>
+                      <Text style={styles.carePrepDemoPreviewBody} numberOfLines={4}>
+                        {carePrepScript.narrationScript}
+                      </Text>
+                      <Text style={styles.carePrepDemoPreviewFoot}>
+                        Preview ready — hosted video wasn&apos;t available. Configure ImaRouter or Seedance on the
+                        server for playable output.
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -1161,16 +1572,35 @@ export default function App() {
     const afterCallbackDeadline = () => Date.now() + 5000;
     let googleRedirectArmed = false;
     try {
-      const redirectTo = AuthSession.makeRedirectUri({
-        scheme: "zyra",
-        path: "auth/callback",
-      });
-      console.log("[mobile auth] redirectTo:", redirectTo);
-
-      if (redirectTo.includes(FORBIDDEN_GOOGLE_REDIRECT_MARKER)) {
-        console.log("[mobile auth] blocked web redirect_uri for native Google OAuth");
-        throw new Error("Google OAuth must use an Expo/native redirect URI, not the web app.");
+      /* Google PKCE verifier lives in AsyncStorage; web bundle would use a different store and break exchange. */
+      if (Platform.OS === "web") {
+        throw new Error("Use Google sign-in in Expo Go or a native build (iOS/Android), not the React Native web target.");
       }
+
+      /*
+       * SDK 54: makeRedirectUri does not honor useProxy; it still resolves to exp:// in Expo Go.
+       * HTTPS proxy URL is AuthSession.getRedirectUrl() (= https://auth.expo.io/@owner/slug).
+       */
+      let redirectTo: string;
+      if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+        void AuthSession.makeRedirectUri({
+          useProxy: true,
+        } as any);
+        try {
+          redirectTo = AuthSession.getRedirectUrl();
+        } catch (e) {
+          const hint = e instanceof Error ? e.message : String(e);
+          throw new Error(
+            `Expo AuthSession proxy URL unavailable: ${hint}. Try: expo login, or define owner/slug in app config so redirect can be https://auth.expo.io/...`,
+          );
+        }
+      } else {
+        redirectTo = AuthSession.makeRedirectUri({
+          scheme: "zyra",
+          path: "auth/callback",
+        });
+      }
+      console.log("[mobile auth] redirectTo:", redirectTo);
 
       armGoogleOAuthRedirect(redirectTo);
       googleRedirectArmed = true;
@@ -1180,8 +1610,6 @@ export default function App() {
         options: {
           redirectTo,
           skipBrowserRedirect: true,
-          /* GoTrue skips forwarding skipBrowserRedirect into the URL query; include explicitly for native OAuth. */
-          queryParams: { skip_http_redirect: "true" },
         },
       });
       if (error) {
@@ -1192,20 +1620,27 @@ export default function App() {
       if (!data?.url) throw new Error("Google auth URL is missing.");
 
       const fromUrl = authorizeRedirectToParam(data.url);
-      console.log("[mobile auth] authorize redirect_to (from oauth url):", fromUrl ?? "(missing)");
-      if (fromUrl && fromUrl !== redirectTo) {
-        console.log("[mobile auth] warning: authorize redirect_to does not equal makeRedirectUri (check Supabase allowlist)");
+      if (!fromUrl) {
+        throw new Error("Supabase OAuth URL is missing redirect_to.");
       }
-      if (fromUrl?.includes(FORBIDDEN_GOOGLE_REDIRECT_MARKER)) {
-        console.log("[mobile auth] authorize URL still targets web callback — whitelist Expo redirectTo in Supabase");
+      if (isZyraWebAuthCallbackRedirect(fromUrl)) {
+        console.log("[mobile auth] refusing OAuth: redirect_to targets web app (PKCE would fail on web)");
+        throw new Error(
+          "OAuth is configured to return to the website, not the app. Add the logged redirectTo (e.g. https://auth.expo.io/...@.../...) and zyra://auth/callback to Supabase Redirect URLs as needed.",
+        );
+      }
+      const trimmedA = fromUrl.replace(/\/+$/, "");
+      const trimmedB = redirectTo.replace(/\/+$/, "");
+      if (trimmedA !== trimmedB) {
+        console.log("[mobile auth] warning: authorize redirect_to differs from expected", { fromUrl, redirectTo });
       }
 
       WebBrowser.maybeCompleteAuthSession();
 
       const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      console.log("openAuthSession result type:", res.type);
+      console.log("[mobile auth] openAuthSession result type:", res.type);
       const callbackUrl = res.type === "success" ? res.url ?? null : null;
-      console.log("result url exists:", Boolean(callbackUrl));
+      console.log("[mobile auth] result url exists:", Boolean(callbackUrl));
 
       let fin = await finalizeGoogleOAuthRedirect(callbackUrl ?? undefined);
       if (fin.flow !== "none") {
@@ -1578,6 +2013,151 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: colors.muted,
     fontSize: 12,
+  },
+  carePrepCard: {
+    marginTop: 10,
+    borderColor: "#F2DDE6",
+    backgroundColor: colors.cardSoft,
+  },
+  carePrepKicker: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: colors.accentDark,
+  },
+  carePrepSub: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 17,
+  },
+  carePrepButton: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+  },
+  carePrepButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.accentDark,
+  },
+  carePrepDisclaimer: {
+    marginTop: 8,
+    fontSize: 10,
+    color: colors.muted,
+    lineHeight: 14,
+  },
+  carePrepButterbaseSaved: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.accentDark,
+    lineHeight: 14,
+  },
+  carePrepImaRouterHint: {
+    marginTop: 8,
+    fontSize: 11,
+    color: colors.muted,
+    lineHeight: 16,
+  },
+  carePrepOrchestrationBox: {
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+  },
+  carePrepStackNote: {
+    fontSize: 9,
+    lineHeight: 13,
+    color: colors.muted,
+  },
+  carePrepLoadingText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.accentDark,
+  },
+  carePrepOutput: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  carePrepSectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    color: colors.accentDark,
+  },
+  carePrepSectionBody: {
+    marginTop: 4,
+    fontSize: 13,
+    color: colors.text,
+    lineHeight: 19,
+  },
+  carePrepBullet: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 17,
+  },
+  carePrepSeedanceError: {
+    marginTop: 10,
+    fontSize: 12,
+    color: "#9B1C1C",
+    lineHeight: 17,
+  },
+  carePrepDemoPreview: {
+    marginTop: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#F2DDE6",
+    backgroundColor: "#FDF6F9",
+    padding: 12,
+    overflow: "hidden",
+  },
+  carePrepDemoPreviewLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: colors.accentDark,
+  },
+  carePrepDemoPreviewTitle: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+    lineHeight: 19,
+  },
+  carePrepDemoPreviewBody: {
+    marginTop: 6,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 17,
+  },
+  carePrepDemoPreviewFoot: {
+    marginTop: 10,
+    fontSize: 10,
+    color: colors.muted,
+    lineHeight: 14,
+  },
+  carePrepVideoPlayer: {
+    marginTop: 12,
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.08)",
   },
   authSwitch: {
     marginTop: 10,

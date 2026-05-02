@@ -1,33 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Star } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown, Star } from "lucide-react";
 import {
   normalizeDoctorMatchResponse,
   recommendSpecialistFromSymptoms,
   type DoctorMatchRecommendation,
 } from "@/lib/specialists/doctor-match";
-import { analyzeHistoryPatterns } from "@/lib/specialists/clarity-insight";
-import type { DoctorMatchHistoryRow } from "@/lib/specialists/doctor-match-history-queries";
 import {
   getSpecialistLabel,
   SPECIALIST_OPTIONS,
   type SpecialistTypeValue,
 } from "@/lib/specialists/search-query";
-
-type SpecialistResult = {
-  placeId: string;
-  place_id?: string;
-  name: string;
-  address: string;
-  rating: number | null;
-  reviewCount: number | null;
-  userRatingsTotal: number | null;
-  openNow: boolean | null;
-  mapsUrl: string;
-  phone: string | null;
-  website: string | null;
-};
+import { CarePrepVideoCard } from "@/components/specialists/care-prep-video-card";
 
 type PlacesResult = {
   placeId: string;
@@ -40,19 +25,8 @@ type PlacesResult = {
   distanceMiles?: number | null;
 };
 
-type DoctorInsightContext = {
-  symptoms: string[];
-  recommendedSpecialist: string;
-};
-
-type DoctorInsights = {
-  matchReason: string;
-  qualitySignal: string;
-  proximitySignal: string;
-};
-
 const DISCLAIMER =
-  "Zyra helps you discover providers, but does not verify medical quality, insurance coverage, availability, or clinical fit. Please confirm details directly with the provider.";
+  "Listings are informational. Confirm quality, insurance, and availability directly with each provider.";
 const EXAMPLE_SYMPTOMS = [
   "Irregular periods",
   "PCOS symptoms",
@@ -60,21 +34,6 @@ const EXAMPLE_SYMPTOMS = [
   "Stomach pain",
   "Hormonal acne",
 ] as const;
-
-type RatingFilter = "any" | "4.0" | "4.5";
-
-type SpecialistsSearchProps = {
-  initialSavedPlaceIds: string[];
-  /** When true, first cards can show a “good match” style badge */
-  hasHealthContext: boolean;
-  recentInsights: DoctorMatchHistoryRow[];
-};
-
-function shortenText(text: string, maxChars: number) {
-  const t = text.trim();
-  if (t.length <= maxChars) return t;
-  return `${t.slice(0, maxChars - 1)}…`;
-}
 
 function StarsRow({ rating }: { rating: number }) {
   const full = Math.min(5, Math.max(0, Math.round(rating)));
@@ -93,71 +52,33 @@ function StarsRow({ rating }: { rating: number }) {
   );
 }
 
-function FilterChip({
-  selected,
+function CareAccordion({
+  title,
   children,
-  onClick,
-  disabled,
+  defaultOpen,
 }: {
-  selected: boolean;
-  children: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition sm:text-xs ${
-        selected
-          ? "border-accent/50 bg-soft-rose/60 text-foreground"
-          : "border-border/80 bg-background/90 text-muted hover:border-accent/30 hover:bg-soft-rose/30"
-      } disabled:cursor-not-allowed disabled:opacity-50`}
+    <details
+      open={defaultOpen}
+      className="group overflow-hidden rounded-lg border border-border/60 bg-background/85"
     >
-      {children}
-    </button>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-accent [&::-webkit-details-marker]:hidden">
+        <span>{title}</span>
+        <ChevronDown
+          className="size-4 shrink-0 text-muted transition-transform duration-200 group-open:rotate-180"
+          aria-hidden
+        />
+      </summary>
+      <div className="border-t border-border/40 px-3 py-3 text-sm leading-relaxed text-muted">{children}</div>
+    </details>
   );
 }
 
-function generateDoctorInsights(doctor: PlacesResult, context: DoctorInsightContext): DoctorInsights {
-  const recommended = context.recommendedSpecialist.trim().toLowerCase();
-  const doctorText = `${doctor.name} ${doctor.address}`.toLowerCase();
-  const symptomsText = context.symptoms.join(", ").trim().toLowerCase();
-
-  let matchReason = "Relevant specialist option";
-  if (recommended && doctorText.includes(recommended)) {
-    matchReason = "Good match for your symptoms";
-  } else if (
-    symptomsText.includes("digest") ||
-    symptomsText.includes("stomach") ||
-    symptomsText.includes("abdominal")
-  ) {
-    matchReason = "Good match for digestive symptoms";
-  }
-
-  let qualitySignal = "";
-  if ((doctor.reviewCount ?? 0) > 100) {
-    qualitySignal = "Trusted by many patients";
-  } else if ((doctor.rating ?? 0) >= 4.5) {
-    qualitySignal = "Highly rated by patients";
-  } else if ((doctor.rating ?? 0) >= 4.0) {
-    qualitySignal = "Well rated";
-  }
-
-  const proximitySignal =
-    typeof doctor.distanceMiles === "number" && Number.isFinite(doctor.distanceMiles)
-      ? `${doctor.distanceMiles.toFixed(1)} miles away`
-      : "";
-
-  return { matchReason, qualitySignal, proximitySignal };
-}
-
-export function SpecialistsSearch({
-  initialSavedPlaceIds,
-  hasHealthContext,
-  recentInsights,
-}: SpecialistsSearchProps) {
+export function SpecialistsSearch() {
   const [location, setLocation] = useState("");
   const [specialistType, setSpecialistType] = useState<SpecialistTypeValue>("gynecologist");
   const [symptoms, setSymptoms] = useState<string[]>([]);
@@ -170,117 +91,6 @@ export function SpecialistsSearch({
   const [hasGenerated, setHasGenerated] = useState(false);
   const [symptomError, setSymptomError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [results, setResults] = useState<SpecialistResult[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [savedPlaceIds, setSavedPlaceIds] = useState(() => new Set(initialSavedPlaceIds));
-  const [togglePid, setTogglePid] = useState<string | null>(null);
-
-  const [ratingFilter, setRatingFilter] = useState<RatingFilter>("any");
-  const [openNowOnly, setOpenNowOnly] = useState(false);
-  const [savedOnly, setSavedOnly] = useState(false);
-
-  const resetFilters = useCallback(() => {
-    setRatingFilter("any");
-    setOpenNowOnly(false);
-    setSavedOnly(false);
-  }, []);
-
-  const savedKey = initialSavedPlaceIds.slice().sort().join("|");
-  useEffect(() => {
-    setSavedPlaceIds(new Set(initialSavedPlaceIds));
-  }, [savedKey]); // eslint-disable-line react-hooks/exhaustive-deps -- sync when server-sourced id list changes
-
-  useEffect(() => {
-    if (error) console.error("[SpecialistsSearch]", error);
-  }, [error]);
-
-  const claritySummary = useMemo(() => {
-    if (recentInsights.length < 3) return null;
-    return analyzeHistoryPatterns(recentInsights);
-  }, [recentInsights]);
-
-  const visibleResults = useMemo(() => {
-    if (!results) return null;
-    return results.filter((r) => {
-      const pid = r.placeId?.trim() ?? "";
-      if (savedOnly && (!pid || !savedPlaceIds.has(pid))) return false;
-      if (openNowOnly && r.openNow !== true) return false;
-      if (ratingFilter === "4.5" && (r.rating == null || r.rating < 4.5)) return false;
-      if (ratingFilter === "4.0" && (r.rating == null || r.rating < 4.0)) return false;
-      return true;
-    });
-  }, [results, savedOnly, openNowOnly, ratingFilter, savedPlaceIds]);
-
-  async function search() {
-    const loc = location.trim();
-    if (!loc || loading) return;
-
-    setError(null);
-    setResults(null);
-    resetFilters();
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/specialists", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ location: loc, specialistType }),
-      });
-      const data = (await res.json()) as { results?: SpecialistResult[]; error?: string };
-
-      if (!res.ok) {
-        if (data.error) console.error("[SpecialistsSearch] search error:", data.error);
-        setError("Something went wrong. Please try again.");
-        return;
-      }
-
-      setResults(Array.isArray(data.results) ? data.results : []);
-    } catch (err) {
-      console.error("[SpecialistsSearch] search exception:", err);
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function toggleSave(r: SpecialistResult) {
-    const pid = r.placeId?.trim();
-    if (!pid) return;
-    setError(null);
-    setTogglePid(pid);
-    try {
-      const res = await fetch("/api/specialists/saved", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          place_id: pid,
-          name: r.name,
-          address: r.address,
-          rating: r.rating,
-        }),
-      });
-      const data = (await res.json()) as { saved?: boolean; place_id?: string; error?: string };
-      if (!res.ok) {
-        if (data.error) console.error("[SpecialistsSearch] save error:", data.error);
-        setError("Something went wrong. Please try again.");
-        return;
-      }
-      if (typeof data.saved === "boolean" && data.place_id) {
-        setSavedPlaceIds((prev) => {
-          const next = new Set(prev);
-          if (data.saved) next.add(data.place_id!);
-          else next.delete(data.place_id!);
-          return next;
-        });
-      }
-    } catch (err) {
-      console.error("[SpecialistsSearch] save exception:", err);
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setTogglePid(null);
-    }
-  }
 
   async function generateMatchAndNearby() {
     const combinedSymptoms = symptoms.join(", ").trim();
@@ -373,10 +183,6 @@ export function SpecialistsSearch({
     }
   }
 
-  const filtersActive = ratingFilter !== "any" || openNowOnly || savedOnly;
-  const filteredEmpty =
-    results != null && results.length > 0 && visibleResults != null && visibleResults.length === 0;
-
   function addSymptomChip(rawValue: string) {
     const value = rawValue.trim();
     if (!value) return;
@@ -392,111 +198,108 @@ export function SpecialistsSearch({
     setSymptoms((prev) => prev.filter((item) => item !== symptom));
   }
 
+  const topNearbyPlaces = placesResults?.slice(0, 3) ?? [];
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
-      <section className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-7">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">DOCTORMATCH AI</p>
-        <h1 className="mt-2 font-serif text-2xl font-semibold text-foreground sm:text-3xl">
-          Find the right specialist near you
+    <div className="mx-auto max-w-7xl space-y-4 pb-4 sm:space-y-5">
+      <header className="space-y-0.5">
+        <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          Your Care Plan
         </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
-          Describe your symptoms, enter your location, and Zyra will suggest a specialist type plus
-          nearby care options.
-        </p>
-        <p className="mt-3 inline-flex rounded-full border border-accent/25 bg-soft-rose/60 px-3 py-1 text-[11px] font-medium text-accent">
-          Educational guidance only - not medical advice
-        </p>
-      </section>
+        <p className="text-sm text-muted">Based on your symptoms, here&apos;s what to do next</p>
+      </header>
 
-      <section className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Start your match</p>
-        <div className="mt-3 grid gap-3 md:grid-cols-2 md:gap-4">
-          <div>
-            <label
-              htmlFor="doctor-match-input"
-              className="block text-xs font-semibold uppercase tracking-wide text-muted"
-            >
-              What are you experiencing?
-            </label>
-            <div className="mt-1.5 rounded-xl border border-border bg-background px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
-              {symptoms.length > 0 ? (
-                <div className="mb-2 flex flex-wrap gap-2">
-                  {symptoms.map((symptom) => (
-                    <span
-                      key={symptom}
-                      className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-soft-rose/60 px-2.5 py-1 text-xs text-foreground"
-                    >
-                      {symptom}
-                      <button
-                        type="button"
-                        onClick={() => removeSymptomChip(symptom)}
-                        className="rounded-full text-muted transition hover:text-foreground"
-                        aria-label={`Remove ${symptom}`}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)_minmax(0,260px)] lg:items-start lg:gap-5">
+        <aside className="mx-auto w-full max-w-[300px] lg:mx-0 lg:max-w-none lg:sticky lg:top-24 lg:self-start">
+          <div className="space-y-3 rounded-xl border border-border/80 bg-surface/90 p-3.5 shadow-sm sm:p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Your inputs</p>
+            <div>
+              <label
+                htmlFor="doctor-match-input"
+                className="block text-xs font-semibold uppercase tracking-wide text-muted"
+              >
+                Symptoms
+              </label>
+              <div className="mt-1.5 rounded-lg border border-border bg-background px-2.5 py-2">
+                {symptoms.length > 0 ? (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {symptoms.map((symptom) => (
+                      <span
+                        key={symptom}
+                        className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-soft-rose/60 px-2 py-0.5 text-[11px] text-foreground"
                       >
-                        x
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              <input
-                id="doctor-match-input"
-                type="text"
-                value={symptomInput}
-                onChange={(event) => {
-                  setSymptomInput(event.target.value);
-                  if (symptomError) setSymptomError(null);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    addSymptomChip(symptomInput);
-                  }
-                }}
-                placeholder="Example: irregular periods, stomach pain, hormonal acne..."
-                className="w-full border-0 bg-transparent p-0 text-sm text-foreground outline-none ring-0 placeholder:text-muted/80"
-              />
-            </div>
-            {symptomError ? <p className="mt-1 text-xs text-red-700">{symptomError}</p> : null}
-            <div className="mt-2 flex flex-wrap gap-2">
-              {EXAMPLE_SYMPTOMS.map((symptom) => (
-                <button
-                  key={symptom}
-                  type="button"
-                  onClick={() => {
-                    addSymptomChip(symptom);
+                        {symptom}
+                        <button
+                          type="button"
+                          onClick={() => removeSymptomChip(symptom)}
+                          className="rounded-full text-muted transition hover:text-foreground"
+                          aria-label={`Remove ${symptom}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <input
+                  id="doctor-match-input"
+                  type="text"
+                  value={symptomInput}
+                  onChange={(event) => {
+                    setSymptomInput(event.target.value);
+                    if (symptomError) setSymptomError(null);
                   }}
-                  className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted transition hover:border-accent/35 hover:bg-soft-rose/30 hover:text-foreground"
-                >
-                  {symptom}
-                </button>
-              ))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addSymptomChip(symptomInput);
+                    }
+                  }}
+                  placeholder="e.g. irregular periods, fatigue"
+                  className="w-full border-0 bg-transparent p-0 text-sm text-foreground outline-none ring-0 placeholder:text-muted/75"
+                />
+              </div>
+              {symptomError ? <p className="mt-1 text-xs text-red-700">{symptomError}</p> : null}
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {EXAMPLE_SYMPTOMS.map((symptom) => (
+                  <button
+                    key={symptom}
+                    type="button"
+                    onClick={() => {
+                      addSymptomChip(symptom);
+                    }}
+                    className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-muted transition hover:border-accent/35 hover:bg-soft-rose/30 hover:text-foreground"
+                  >
+                    {symptom}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label
-              htmlFor="specialist-location"
-              className="block text-xs font-semibold uppercase tracking-wide text-muted"
-            >
-              Where should we search?
-            </label>
-            <input
-              id="specialist-location"
-              type="text"
-              value={location}
-              onChange={(e) => {
-                setLocation(e.target.value);
-                if (locationError) setLocationError(null);
-                if (placesError) setPlacesError(null);
-              }}
-              placeholder="City or ZIP code"
-              autoComplete="postal-code"
-              className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none ring-accent/25 transition focus:ring-2 sm:rounded-2xl sm:px-4 sm:py-3"
-            />
-            {locationError ? <p className="mt-1 text-xs text-red-700">{locationError}</p> : null}
+            <div>
+              <label
+                htmlFor="specialist-location"
+                className="block text-xs font-semibold uppercase tracking-wide text-muted"
+              >
+                Location
+              </label>
+              <input
+                id="specialist-location"
+                type="text"
+                value={location}
+                onChange={(e) => {
+                  setLocation(e.target.value);
+                  if (locationError) setLocationError(null);
+                  if (placesError) setPlacesError(null);
+                }}
+                placeholder="City or ZIP"
+                autoComplete="postal-code"
+                className="mt-1.5 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none ring-accent/25 transition focus:ring-2"
+              />
+              {locationError ? <p className="mt-1 text-xs text-red-700">{locationError}</p> : null}
+            </div>
 
-            <div className="mt-3">
+            <div>
               <label
                 htmlFor="specialist-type"
                 className="block text-xs font-semibold uppercase tracking-wide text-muted"
@@ -507,8 +310,8 @@ export function SpecialistsSearch({
                 id="specialist-type"
                 value={specialistType}
                 onChange={(e) => setSpecialistType(e.target.value as SpecialistTypeValue)}
-                disabled={loading || generateLoading || placesLoading}
-                className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none ring-accent/25 transition focus:ring-2 disabled:opacity-60 sm:rounded-2xl sm:px-4 sm:py-3"
+                disabled={generateLoading || placesLoading}
+                className="mt-1.5 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none ring-accent/25 transition focus:ring-2 disabled:opacity-60"
               >
                 {SPECIALIST_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -517,505 +320,155 @@ export function SpecialistsSearch({
                 ))}
               </select>
             </div>
+
+            <button
+              type="button"
+              onClick={() => void generateMatchAndNearby()}
+              disabled={generateLoading || placesLoading}
+              className="flex h-10 w-full items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Generate plan
+            </button>
           </div>
-        </div>
+        </aside>
 
-        <button
-          type="button"
-          onClick={() => void generateMatchAndNearby()}
-          disabled={generateLoading || placesLoading}
-          className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Generate match & nearby options
-        </button>
-      </section>
-
-      {generateLoading || placesLoading ? (
-        <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-6 text-sm text-muted">
-          Analyzing symptoms and finding nearby specialists...
-        </div>
-      ) : null}
-
-      {!hasGenerated ? (
-        <section className="rounded-2xl border border-dashed border-border/70 bg-background/70 px-4 py-8 text-sm text-muted sm:rounded-3xl">
-          Your recommendation and nearby care options will appear after you generate a match.
-        </section>
-      ) : null}
-
-      {doctorMatchResult ? (
-        <section className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-            Your recommended care path
-          </p>
-          <div className="mt-3 rounded-xl border border-border/70 bg-background/85 p-4">
-            {doctorMatchResult.pattern ? (
-              <div className="mb-3 rounded-lg border border-accent/25 bg-soft-rose/50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-accent">
-                  Possible pattern
-                </p>
-                <p className="mt-1 truncate text-sm text-foreground">{doctorMatchResult.pattern}</p>
-              </div>
-            ) : null}
-            <p className="text-xs font-semibold uppercase tracking-wide text-accent">
-              Recommended specialist
-            </p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{doctorMatchResult.specialist}</p>
-
-            <div className="mt-3 space-y-2">
-              <details className="rounded-lg border border-border/70 bg-surface/70 px-3 py-2">
-                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-accent">
-                  Why this match
-                </summary>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{doctorMatchResult.reason}</p>
-              </details>
-
-              <details className="rounded-lg border border-border/70 bg-surface/70 px-3 py-2">
-                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-accent">
-                  Suggested next steps
-                </summary>
-                <ul className="mt-2 space-y-1 text-sm text-muted">
-                  {doctorMatchResult.carePath.map((item) => (
-                    <li key={item} className="flex gap-2">
-                      <span className="text-accent" aria-hidden>
-                        ·
-                      </span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-
-              <details className="rounded-lg border border-border/70 bg-surface/70 px-3 py-2">
-                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-accent">
-                  Questions to ask
-                </summary>
-                <ul className="mt-2 space-y-1 text-sm text-muted">
-                  {doctorMatchResult.questionsToAsk.map((item) => (
-                    <li key={item} className="flex gap-2">
-                      <span className="text-accent" aria-hidden>
-                        ·
-                      </span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-
-              <details className="rounded-lg border border-border/70 bg-surface/70 px-3 py-2">
-                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-accent">
-                  Seek urgent care if
-                </summary>
-                <p className="mt-2 text-sm leading-relaxed text-muted">
-                  {doctorMatchResult.urgentCareWarning}
-                </p>
-              </details>
+        <section className="min-w-0" aria-labelledby="care-insight-heading">
+          <h2 id="care-insight-heading" className="sr-only">
+            Care insight
+          </h2>
+          {(generateLoading || placesLoading) && hasGenerated ? (
+            <div className="rounded-xl border border-dashed border-accent/25 bg-soft-rose/15 px-4 py-10 text-center text-sm text-muted">
+              Updating your plan and nearby listings…
             </div>
-          </div>
-        </section>
-      ) : null}
+          ) : !hasGenerated ? (
+            <div className="rounded-xl border border-dashed border-border/70 bg-background/60 px-4 py-10 text-center text-sm text-muted">
+              Add symptoms and location, then tap <span className="font-medium text-foreground">Generate plan</span>.
+            </div>
+          ) : doctorMatchResult ? (
+            <div className="rounded-xl border border-border/80 bg-surface/90 p-3.5 shadow-sm sm:p-4">
+              <div className="space-y-3 rounded-lg border border-accent/20 bg-soft-rose/35 p-3">
+                {doctorMatchResult.pattern ? (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-accent">Possible pattern</p>
+                    <p className="mt-1 text-sm font-medium leading-snug text-foreground">
+                      {doctorMatchResult.pattern}
+                    </p>
+                  </div>
+                ) : null}
+                <div className={doctorMatchResult.pattern ? "border-t border-border/40 pt-3" : ""}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-accent">Recommended specialist</p>
+                  <p className="mt-1 text-base font-semibold text-foreground">{doctorMatchResult.specialist}</p>
+                </div>
+              </div>
 
-      {placesResults !== null ? (
-        <section className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-7">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Nearby care options</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
-            Listings are powered by Google Places and may include clinics, practices, or medical
-            offices.
-          </p>
-
-          {placesError ? (
-            <p className="mt-3 rounded-xl border border-red-200/80 bg-red-50 px-3 py-3 text-sm text-red-950">
-              {placesError}
-            </p>
-          ) : null}
-
-          {placesResults.length === 0 ? (
-            <p className="mt-3 rounded-xl border border-dashed border-border/70 bg-background/60 px-3 py-4 text-sm text-muted">
-              No nearby specialists found. Try another location or broader specialist type.
-            </p>
+              <div className="mt-3 space-y-2">
+                <CareAccordion title="Why this match" defaultOpen>
+                  <p>{doctorMatchResult.reason}</p>
+                </CareAccordion>
+                <CareAccordion title="Suggested next steps">
+                  <ul className="space-y-1.5">
+                    {doctorMatchResult.carePath.map((item) => (
+                      <li key={item} className="flex gap-2">
+                        <span className="text-accent" aria-hidden>
+                          ·
+                        </span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CareAccordion>
+                <CareAccordion title="Questions to ask">
+                  <ul className="space-y-1.5">
+                    {doctorMatchResult.questionsToAsk.map((item) => (
+                      <li key={item} className="flex gap-2">
+                        <span className="text-accent" aria-hidden>
+                          ·
+                        </span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CareAccordion>
+                <CareAccordion title="Seek urgent care if">
+                  <p>{doctorMatchResult.urgentCareWarning}</p>
+                </CareAccordion>
+              </div>
+            </div>
           ) : (
-            <ul className="mt-3 grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-              {placesResults.map((place) => (
-                (() => {
-                  const insights = generateDoctorInsights(place, {
-                    symptoms,
-                    recommendedSpecialist:
-                      doctorMatchResult?.specialist ?? getSpecialistLabel(specialistType),
-                  });
-                  const insightItems = [
-                    insights.matchReason,
-                    insights.qualitySignal,
-                    insights.proximitySignal,
-                  ].filter(Boolean).slice(0, 3);
-
-                  return (
-                    <li
-                      key={place.placeId || `${place.name}-${place.address}`}
-                      className="rounded-xl border border-border/70 bg-background/90 p-3.5 shadow-sm"
-                    >
-                      <p className="font-serif text-base font-semibold text-foreground">{place.name}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted sm:text-sm">{place.address}</p>
-
-                      {insightItems.length > 0 ? (
-                        <ul className="mt-2 space-y-1 text-xs text-muted">
-                          {insightItems.map((insight) => (
-                            <li key={insight} className="flex items-start gap-2">
-                              <span className="text-accent">•</span>
-                              <span>{insight}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-
-                      <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted">
-                        <span>
-                          Rating:{" "}
-                          <span className="font-semibold text-foreground">
-                            {place.rating != null ? place.rating.toFixed(1) : "N/A"}
-                          </span>
-                        </span>
-                        <span>
-                          Reviews:{" "}
-                          <span className="font-semibold text-foreground">
-                            {place.reviewCount ?? "N/A"}
-                          </span>
-                        </span>
-                        <span>
-                          Open now:{" "}
-                          <span className="font-semibold text-foreground">
-                            {place.openNow == null ? "Unknown" : place.openNow ? "Yes" : "No"}
-                          </span>
-                        </span>
-                      </div>
-                      <a
-                        href={place.mapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-3 inline-flex min-h-[2.5rem] w-full items-center justify-center rounded-full border border-border bg-surface px-4 text-xs font-semibold text-accent transition hover:border-accent/40 sm:text-sm"
-                      >
-                        View on Google Maps
-                      </a>
-                    </li>
-                  );
-                })()
-              ))}
-            </ul>
+            <div className="rounded-xl border border-dashed border-border/70 bg-background/60 px-4 py-8 text-center text-sm text-muted">
+              No recommendation yet.
+            </div>
           )}
         </section>
-      ) : null}
 
-      {claritySummary ? (
-        <section className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
-          <h2 className="text-sm font-semibold text-foreground">Clarity Insight</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted">{claritySummary}</p>
-        </section>
-      ) : null}
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start" aria-labelledby="nearby-specialists-heading">
+          <div className="rounded-xl border border-border/80 bg-surface/90 p-3 shadow-sm sm:p-3.5">
+            <h2 id="nearby-specialists-heading" className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              Nearby specialists
+            </h2>
+            <p className="mt-1 text-[10px] leading-snug text-muted/90">Google Places · top 3</p>
 
-      <section className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
-        <h2 className="text-sm font-semibold text-foreground">Your recent insights</h2>
-        {recentInsights.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">No insights yet. Generate your first match.</p>
-        ) : (
-          <ul className="mt-3 space-y-3 border-t border-border/60 pt-3">
-            {recentInsights.map((row) => (
-              <li key={row.id} className="text-sm">
-                <p className="text-xs text-muted">
-                  {new Date(row.created_at).toLocaleDateString(undefined, {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </p>
-                <p className="mt-1 text-foreground">
-                  <span className="text-muted">Symptoms: </span>
-                  {shortenText(row.symptoms, 100)}
-                </p>
-                {row.pattern.trim() ? (
-                  <p className="mt-0.5 text-muted">
-                    <span className="font-medium text-foreground/80">Pattern: </span>
-                    {shortenText(row.pattern, 120)}
-                  </p>
-                ) : null}
-                <p className="mt-0.5 text-muted">
-                  <span className="font-medium text-foreground/80">Specialist: </span>
-                  {row.specialist}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <details id="specialist-search-section" className="rounded-2xl border border-border/80 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
-        <summary className="cursor-pointer text-sm font-semibold text-foreground">
-          Manual specialist search
-        </summary>
-        <div className="mt-4">
-          <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
-            <div className="sm:col-span-2">
-              <label htmlFor="manual-specialist-location" className="block text-xs font-semibold uppercase tracking-wide text-muted">
-                Location
-              </label>
-              <input
-                id="manual-specialist-location"
-                type="text"
-                value={location}
-                onChange={(e) => {
-                  setLocation(e.target.value);
-                  if (locationError) setLocationError(null);
-                }}
-                placeholder="City, state, or ZIP code"
-                disabled={loading}
-                autoComplete="postal-code"
-                className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none ring-accent/25 transition focus:ring-2 disabled:opacity-60 sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label htmlFor="manual-specialist-type" className="block text-xs font-semibold uppercase tracking-wide text-muted">
-                Specialist type
-              </label>
-              <select
-                id="manual-specialist-type"
-                value={specialistType}
-                onChange={(e) => setSpecialistType(e.target.value as SpecialistTypeValue)}
-                disabled={loading}
-                className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none ring-accent/25 transition focus:ring-2 disabled:opacity-60 sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3"
-              >
-                {SPECIALIST_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void search()}
-            disabled={loading || !location.trim()}
-            className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? "Searching…" : "Search specialists"}
-          </button>
-        </div>
-      </details>
-
-      <p className="rounded-xl border border-border/60 bg-background/70 px-3 py-2.5 text-center text-[11px] leading-relaxed text-muted sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
-        {DISCLAIMER}
-      </p>
-
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-2xl border border-red-200/80 bg-red-50 px-4 py-3 text-center text-sm text-red-950"
-        >
-          {error}
-        </div>
-      ) : null}
-
-      {loading ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-background/50 py-10 text-sm text-muted sm:gap-3 sm:rounded-3xl sm:py-16">
-          <span
-            className="size-9 animate-spin rounded-full border-2 border-accent border-t-transparent"
-            aria-hidden
-          />
-          <p>Searching nearby providers…</p>
-        </div>
-      ) : null}
-
-      {!loading && results !== null && results.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-8 text-center sm:rounded-3xl sm:px-5 sm:py-10">
-          <p className="font-serif text-base font-semibold text-foreground sm:text-lg">
-            No specialists found nearby
-          </p>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
-            Try a different search phrase, broaden your location, or check again later. Google may
-            return fewer results in some areas.
-          </p>
-        </div>
-      ) : null}
-
-      {!loading && results !== null && results.length > 0 ? (
-        <div className="space-y-3">
-          <div className="rounded-xl border border-border/70 bg-surface/80 p-3 shadow-sm sm:p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-xs">
-              Filter results
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-3">
-              <div className="flex w-full min-w-0 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:w-auto sm:flex-1 [&::-webkit-scrollbar]:hidden">
-                <FilterChip selected={ratingFilter === "any"} onClick={() => setRatingFilter("any")}>
-                  Any rating
-                </FilterChip>
-                <FilterChip
-                  selected={ratingFilter === "4.0"}
-                  onClick={() => setRatingFilter("4.0")}
-                >
-                  4.0+ stars
-                </FilterChip>
-                <FilterChip
-                  selected={ratingFilter === "4.5"}
-                  onClick={() => setRatingFilter("4.5")}
-                >
-                  4.5+ stars
-                </FilterChip>
-                <FilterChip
-                  selected={openNowOnly}
-                  onClick={() => setOpenNowOnly((v) => !v)}
-                >
-                  Open now
-                </FilterChip>
-                <FilterChip selected={savedOnly} onClick={() => setSavedOnly((v) => !v)}>
-                  Saved only
-                </FilterChip>
-              </div>
-              {filtersActive ? (
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="shrink-0 text-[11px] font-semibold text-accent underline-offset-2 hover:underline sm:text-xs"
-                >
-                  Reset
-                </button>
-              ) : null}
-            </div>
-            <p className="mt-2 text-[10px] leading-snug text-muted">
-              Distance sorting isn&apos;t available — Google Places text search doesn&apos;t return
-              miles in this view.
-            </p>
-          </div>
-
-          {filteredEmpty ? (
-            <div
-              className="rounded-xl border border-dashed border-border/80 bg-background/65 px-4 py-6 text-center"
-              role="status"
-            >
-              <p className="text-sm font-medium text-foreground">No specialists match these filters</p>
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="mt-3 text-sm font-semibold text-accent underline-offset-2 hover:underline"
-              >
-                Clear filters
-              </button>
-            </div>
-          ) : (
-            <ul className="space-y-2.5 sm:space-y-3">
-              {(visibleResults ?? []).map((r, index) => {
-                const pid = r.placeId?.trim() ?? "";
-                const canSave = pid.length > 0;
-                const isSaved = canSave && savedPlaceIds.has(pid);
-                const toggling = togglePid === pid;
-                const key = pid || `${r.name}-${r.address}`;
-                const showBadge = index < 2;
-                const badgeLabel = hasHealthContext
-                  ? "Good match for your needs"
-                  : "Suggested starting point";
-
-                return (
+            {!hasGenerated ? (
+              <p className="mt-3 text-xs text-muted">Generate your plan to see options.</p>
+            ) : placesLoading ? (
+              <p className="mt-3 text-xs text-muted">Loading…</p>
+            ) : placesResults === null ? (
+              <p className="mt-3 text-xs text-muted">—</p>
+            ) : placesError ? (
+              <p className="mt-3 rounded-lg border border-red-200/80 bg-red-50/90 px-2.5 py-2 text-xs text-red-950">
+                {placesError}
+              </p>
+            ) : topNearbyPlaces.length === 0 ? (
+              <p className="mt-3 text-xs text-muted">No listings. Try another location.</p>
+            ) : (
+              <ul className="mt-3 space-y-2.5">
+                {topNearbyPlaces.map((place) => (
                   <li
-                    key={key}
-                    className="relative rounded-xl border border-border/70 bg-background/90 p-3.5 shadow-sm sm:rounded-2xl sm:p-4"
+                    key={place.placeId || `${place.name}-${place.address}`}
+                    className="rounded-lg border border-border/60 bg-background/90 p-2.5"
                   >
-                    {showBadge ? (
-                      <span className="mb-2 inline-block rounded-full border border-accent/25 bg-soft-rose/50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                        {badgeLabel}
-                      </span>
-                    ) : null}
-
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                      <h2 className="min-w-0 font-serif text-base font-semibold leading-snug text-foreground sm:text-lg">
-                        {r.name}
-                      </h2>
-                    </div>
-
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      {r.rating != null && !Number.isNaN(r.rating) ? (
+                    <p className="text-sm font-semibold leading-snug text-foreground">{place.name}</p>
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-muted">{place.address}</p>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      {place.rating != null && !Number.isNaN(place.rating) ? (
                         <>
-                          <StarsRow rating={r.rating} />
-                          <span className="text-sm font-semibold tabular-nums text-foreground">
-                            {r.rating.toFixed(1)}
+                          <StarsRow rating={place.rating} />
+                          <span className="text-xs font-semibold tabular-nums text-foreground">
+                            {place.rating.toFixed(1)}
                           </span>
                         </>
                       ) : (
-                        <span className="text-xs text-muted">No rating</span>
-                      )}
-                      {(r.reviewCount ?? r.userRatingsTotal) != null ? (
-                        <span className="text-xs text-muted">
-                          ({(r.reviewCount ?? r.userRatingsTotal)} review
-                          {(r.reviewCount ?? r.userRatingsTotal) === 1 ? "" : "s"})
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <p className="mt-2 line-clamp-2 text-xs leading-snug text-muted sm:text-sm">
-                      {r.address}
-                    </p>
-
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] sm:text-xs">
-                      {r.openNow === true ? (
-                        <span className="rounded-full bg-emerald-100/90 px-2 py-0.5 font-medium text-emerald-900">
-                          Open now
-                        </span>
-                      ) : r.openNow === false ? (
-                        <span className="rounded-full bg-border/50 px-2 py-0.5 font-medium text-muted">
-                          May be closed now
-                        </span>
-                      ) : (
-                        <span className="text-muted">Hours unknown</span>
+                        <span className="text-[11px] text-muted">No rating</span>
                       )}
                     </div>
-
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/40 pt-2 text-[11px] text-muted sm:text-xs">
-                      <span>
-                        <span className="font-medium text-foreground/80">Phone: </span>
-                        {r.phone ?? "—"}
-                      </span>
-                      {r.website ? (
-                        <a
-                          href={r.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent underline-offset-2 hover:underline"
-                        >
-                          Website
-                        </a>
-                      ) : null}
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <a
-                        href={r.mapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex min-h-[2.75rem] flex-1 items-center justify-center rounded-full border border-border bg-surface px-4 py-2 text-xs font-semibold text-accent transition hover:border-accent/40 sm:min-h-0 sm:flex-none sm:text-sm"
-                      >
-                        Maps
-                      </a>
-                      {canSave ? (
-                        <button
-                          type="button"
-                          onClick={() => void toggleSave(r)}
-                          disabled={toggling}
-                          aria-pressed={isSaved}
-                          aria-label={isSaved ? "Remove from saved" : "Save specialist"}
-                          className={`inline-flex min-h-[2.75rem] flex-1 items-center justify-center rounded-full border px-4 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:flex-none sm:text-sm ${
-                            isSaved
-                              ? "border-accent/40 bg-soft-rose/50 text-accent hover:bg-soft-rose/70"
-                              : "border-border bg-background text-foreground hover:border-accent/40 hover:bg-soft-rose/25"
-                          }`}
-                        >
-                          {toggling ? "…" : isSaved ? "Saved" : "Save"}
-                        </button>
-                      ) : null}
-                    </div>
+                    <a
+                      href={place.mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 flex min-h-9 w-full items-center justify-center rounded-full border border-border bg-surface px-3 text-[11px] font-semibold text-accent transition hover:border-accent/40"
+                    >
+                      Open in Maps
+                    </a>
                   </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+                ))}
+              </ul>
+            )}
+          </div>
+        </aside>
+      </div>
+
+      {doctorMatchResult ? (
+        <section
+          className="rounded-xl border border-accent/35 bg-gradient-to-br from-soft-rose/50 via-soft-rose/25 to-background p-3 shadow-[0_8px_30px_-12px_rgba(233,109,154,0.35)] ring-1 ring-accent/15 sm:p-4"
+          aria-label="CarePrep video"
+        >
+          <CarePrepVideoCard symptoms={symptoms} recommendation={doctorMatchResult} />
+        </section>
       ) : null}
+
+      <p className="rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-center text-[11px] leading-snug text-muted">
+        {DISCLAIMER}
+      </p>
     </div>
   );
 }
