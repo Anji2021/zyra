@@ -18,6 +18,8 @@ import {
 import type { DoctorMatchRecommendation } from "@/lib/specialists/doctor-match";
 
 const SEEDANCE_POLL_INTERVAL_MS = 10000;
+/** Hackathon demo: show local fallback if Seedance has not returned a playable URL yet */
+const SEEDANCE_HACKATHON_DEMO_FALLBACK_MS = 5000;
 /** 5 minutes at 10s steps */
 const SEEDANCE_POLL_MAX_ATTEMPTS = 30;
 const IMAROUTER_POLL_INTERVAL_MS = 5000;
@@ -30,6 +32,32 @@ const VIDEO_UNAVAILABLE_USER_COPY =
   "Video generation unavailable right now. Preview ready.";
 
 const SEEDANCE_COMPLETED_NO_URL_COPY = "Seedance completed but no video URL found.";
+
+const GENERIC_VIDEO_URL = "/demo-careprep.mp4";
+const MODERATION_DEMO_LABEL =
+  "Showing demo CarePrep video (original video blocked by content safety).";
+const SEEDANCE_PROCESSING_DEMO_FALLBACK_COPY =
+  "Showing demo CarePrep video while Seedance continues processing.";
+/** Combine mapped `message`, envelope `message`, and nested poll `raw` (moderation may omit `failed`). */
+function seedanceModerationScanText(
+  parsed: CarePrepVideoGenerationResponse | null,
+  envelope?: unknown,
+): string {
+  const parts: string[] = [(parsed?.message ?? "").toLowerCase()];
+  if (envelope && typeof envelope === "object" && !Array.isArray(envelope)) {
+    const e = envelope as Record<string, unknown>;
+    if (typeof e.message === "string") parts.push(e.message.toLowerCase());
+    const raw = e.raw;
+    if (raw != null) {
+      try {
+        parts.push(JSON.stringify(raw).toLowerCase());
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return parts.join(" ");
+}
 
 /** Inspect poll `raw` from `/api/careprep-video/status` when mapper keeps `processing` but Seedance reports done. */
 function seedanceRawIndicatesSucceededWithoutPlayableUrl(
@@ -143,9 +171,12 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
   const [seedanceCompletedNoUrlHint, setSeedanceCompletedNoUrlHint] = useState<string | null>(null);
   const [seedanceStillProcessingHint, setSeedanceStillProcessingHint] = useState<string | null>(null);
   const [videoStatusRefreshing, setVideoStatusRefreshing] = useState(false);
+  const [moderationDemoVideo, setModerationDemoVideo] = useState(false);
+  const [seedanceProcessingDemoFallback, setSeedanceProcessingDemoFallback] = useState(false);
   const [butterbaseSaved, setButterbaseSaved] = useState(false);
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const seedanceDemoFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollInFlightRef = useRef(false);
   const pollAttemptsRef = useRef(0);
 
@@ -154,9 +185,25 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
+    if (seedanceDemoFallbackTimeoutRef.current != null) {
+      clearTimeout(seedanceDemoFallbackTimeoutRef.current);
+      seedanceDemoFallbackTimeoutRef.current = null;
+    }
   }, []);
 
   useEffect(() => () => stopVideoPolling(), [stopVideoPolling]);
+
+  const applySeedanceModerationDemoVideo = useCallback((showModerationLabel = true) => {
+    stopVideoPolling();
+    setModerationDemoVideo(showModerationLabel);
+    setSeedanceProcessingDemoFallback(false);
+    setVideoPreviewFallback(false);
+    setSeedanceCompletedNoUrlHint(null);
+    setSeedanceStillProcessingHint(null);
+    setImarouterVideoHint(null);
+    setVideoUrl(GENERIC_VIDEO_URL);
+    setVideoLoading(false);
+  }, [stopVideoPolling]);
 
   const handleGenerate = useCallback(async () => {
     const symptomsText = symptoms.map((s) => s.trim()).filter(Boolean).join(", ");
@@ -172,6 +219,7 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
     setImarouterVideoHint(null);
     setSeedanceCompletedNoUrlHint(null);
     setSeedanceStillProcessingHint(null);
+    setModerationDemoVideo(false);
     setButterbaseSaved(false);
     setLoading(true);
     try {
@@ -228,6 +276,8 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
     setImarouterVideoHint(null);
     setSeedanceCompletedNoUrlHint(null);
     setSeedanceStillProcessingHint(null);
+    setModerationDemoVideo(false);
+    setSeedanceProcessingDemoFallback(false);
     setVideoLoading(true);
     let previewOnlyBecauseFailed = false;
     let enteredIntervalPolling = false;
@@ -262,12 +312,26 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
         setImarouterVideoHint(null);
         setSeedanceCompletedNoUrlHint(null);
         setSeedanceStillProcessingHint(null);
+        setModerationDemoVideo(false);
+        setSeedanceProcessingDemoFallback(false);
         setVideoUrl(first.videoUrl);
         setVideoJobId(resolveCarePrepVideoJobId(first) || null);
         setVideoPollProvider(first.provider ?? null);
         setVideoLoading(false);
         const raw = json as Record<string, unknown>;
         if (raw.butterbaseSaved === true) setButterbaseSaved(true);
+        return;
+      }
+
+      const createProv = first.provider ?? "seedance";
+      const createBlob = seedanceModerationScanText(first, json);
+      const createModerationErr =
+        createBlob.includes("sensitive") || createBlob.includes("safety");
+      const createFailed = first.status === "failed";
+
+      if (createProv === "seedance" && (createModerationErr || createFailed)) {
+        console.log("[video] triggering fallback due to moderation");
+        applySeedanceModerationDemoVideo(createModerationErr);
         return;
       }
 
@@ -331,6 +395,8 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
             console.log("[video] video URL found:", url);
             setSeedanceCompletedNoUrlHint(null);
             setSeedanceStillProcessingHint(null);
+            setModerationDemoVideo(false);
+            setSeedanceProcessingDemoFallback(false);
             setVideoUrl(url);
             setVideoLoading(false);
             stopVideoPolling();
@@ -345,6 +411,23 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
             return;
           }
 
+          if (pollProv === "seedance") {
+            // API may return `running`; mapper union does not always include it.
+            if ((parsed?.status as string | undefined) === "running") {
+              return;
+            }
+
+            const blob = seedanceModerationScanText(parsed, res);
+            const isModerationError = blob.includes("sensitive") || blob.includes("safety");
+            const isFailed = parsed?.status === "failed";
+
+            if (isModerationError || isFailed) {
+              console.log("[video] triggering fallback due to moderation");
+              applySeedanceModerationDemoVideo(isModerationError);
+              return;
+            }
+          }
+
           if (
             pollProv === "seedance" &&
             seedanceRawIndicatesSucceededWithoutPlayableUrl(res, parsed)
@@ -356,11 +439,12 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
             return;
           }
 
-          if (parsed?.status === "failed") {
+          if (pollProv === "imarouter" && parsed?.status === "failed") {
             stopVideoPolling();
             setVideoLoading(false);
             setSeedanceCompletedNoUrlHint(null);
             setSeedanceStillProcessingHint(null);
+            setModerationDemoVideo(false);
             setVideoPreviewFallback(true);
             if (parsed.provider === "imarouter" && parsed.message.trim()) {
               setImarouterVideoHint(parsed.message.trim());
@@ -378,6 +462,27 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
 
       void runPoll();
       pollingRef.current = setInterval(() => void runPoll(), intervalMs);
+
+      if (pollProv === "seedance") {
+        seedanceDemoFallbackTimeoutRef.current = setTimeout(() => {
+          seedanceDemoFallbackTimeoutRef.current = null;
+          let appliedDemo = false;
+          setVideoUrl((prev) => {
+            if (prev) return prev;
+            appliedDemo = true;
+            return GENERIC_VIDEO_URL;
+          });
+          if (appliedDemo) {
+            stopVideoPolling();
+            setVideoLoading(false);
+            setSeedanceProcessingDemoFallback(true);
+            setModerationDemoVideo(false);
+            setSeedanceStillProcessingHint(null);
+            setSeedanceCompletedNoUrlHint(null);
+          }
+        }, SEEDANCE_HACKATHON_DEMO_FALLBACK_MS);
+      }
+
       return;
     } catch (err) {
       console.error("[CarePrepVideo] Video generation request failed:", err);
@@ -389,7 +494,14 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
         }
       }
     }
-  }, [generated, recommendation.pattern, recommendation.specialist, symptoms, stopVideoPolling]);
+  }, [
+    generated,
+    recommendation.pattern,
+    recommendation.specialist,
+    symptoms,
+    stopVideoPolling,
+    applySeedanceModerationDemoVideo,
+  ]);
 
   const handleRefreshVideoStatus = useCallback(async () => {
     if (!generated || !videoJobId || !videoPollProvider) return;
@@ -422,8 +534,11 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
       if (parsed && isCarePrepVideoPlayable(parsed)) {
         const url = parsed.videoUrl.trim();
         console.log("[video] video URL found:", url);
+        stopVideoPolling();
         setSeedanceCompletedNoUrlHint(null);
         setSeedanceStillProcessingHint(null);
+        setModerationDemoVideo(false);
+        setSeedanceProcessingDemoFallback(false);
         setVideoUrl(url);
         setVideoJobId(resolveCarePrepVideoJobId(parsed) || videoJobId);
         setImarouterVideoHint(null);
@@ -436,9 +551,26 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
         return;
       }
 
+      if (videoPollProvider === "seedance") {
+        if ((parsed?.status as string | undefined) === "running") {
+          return;
+        }
+
+        const blob = seedanceModerationScanText(parsed, res);
+        const isModerationError = blob.includes("sensitive") || blob.includes("safety");
+        const isFailed = parsed?.status === "failed";
+
+        if (isModerationError || isFailed) {
+          console.log("[video] triggering fallback due to moderation");
+          applySeedanceModerationDemoVideo(isModerationError);
+          return;
+        }
+      }
+
       if (parsed?.status === "failed") {
         setSeedanceStillProcessingHint(null);
         setSeedanceCompletedNoUrlHint(null);
+        setModerationDemoVideo(false);
         setVideoPreviewFallback(true);
         if (parsed.provider === "imarouter" && parsed.message.trim()) {
           setImarouterVideoHint(parsed.message.trim());
@@ -468,6 +600,8 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
     symptoms,
     videoJobId,
     videoPollProvider,
+    applySeedanceModerationDemoVideo,
+    stopVideoPolling,
   ]);
 
   return (
@@ -558,14 +692,21 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
           ) : null}
 
           {videoUrl ? (
-            <video
-              className="mt-2 w-full max-h-[min(70vh,520px)] rounded-lg border border-border/80 bg-black/5 object-contain"
-              controls
-              playsInline
-              autoPlay
-              src={videoUrl}
-              title={generated.videoTitle}
-            />
+            <>
+              {moderationDemoVideo ? (
+                <p className="text-[11px] leading-snug text-muted">{MODERATION_DEMO_LABEL}</p>
+              ) : seedanceProcessingDemoFallback ? (
+                <p className="text-[11px] leading-snug text-muted">{SEEDANCE_PROCESSING_DEMO_FALLBACK_COPY}</p>
+              ) : null}
+              <video
+                className="mt-2 w-full max-h-[min(70vh,520px)] rounded-lg border border-border/80 bg-black/5 object-contain"
+                src={videoUrl}
+                controls
+                autoPlay
+                playsInline
+                title={generated.videoTitle}
+              />
+            </>
           ) : null}
 
           {videoPreviewFallback && generated && !videoUrl ? (
