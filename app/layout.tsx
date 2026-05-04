@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { DM_Sans, Lora } from "next/font/google";
+import Script from "next/script";
 import { defaultTitle, ZYRA } from "@/lib/zyra/site";
 import "./globals.css";
+
 
 const sans = DM_Sans({
   variable: "--font-sans-body",
@@ -64,7 +66,25 @@ export default function RootLayout({
       lang="en"
       className={`${sans.variable} ${serif.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        {children}
+        {process.env.NEXT_PUBLIC_GA_ID ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}');
+          `}
+            </Script>
+          </>
+        ) : null}
+      </body>
     </html>
   );
 }
