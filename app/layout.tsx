@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { DM_Sans, Lora } from "next/font/google";
 import Script from "next/script";
+import { GaDevLogger, GoogleAnalyticsRouteViews } from "@/components/analytics/google-analytics";
 import { defaultTitle, ZYRA } from "@/lib/zyra/site";
 import "./globals.css";
+
+const gaMeasurementId = process.env.NEXT_PUBLIC_GA_ID?.trim();
+const gaEnabled = Boolean(gaMeasurementId);
 
 
 const sans = DM_Sans({
@@ -67,23 +71,27 @@ export default function RootLayout({
       className={`${sans.variable} ${serif.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        {children}
-        {process.env.NEXT_PUBLIC_GA_ID ? (
+        {gaEnabled && gaMeasurementId ? (
           <>
             <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
               strategy="afterInteractive"
             />
             <Script id="google-analytics" strategy="afterInteractive">
               {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}');
-          `}
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${gaMeasurementId}', { send_page_view: true });
+`}
             </Script>
+            <GoogleAnalyticsRouteViews gaId={gaMeasurementId} />
           </>
         ) : null}
+        {process.env.NODE_ENV === "development" ? (
+          <GaDevLogger configured={gaEnabled} />
+        ) : null}
+        {children}
       </body>
     </html>
   );
