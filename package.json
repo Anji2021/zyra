@@ -2,7 +2,10 @@
   "name": "zyra",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["mobile", "shared"],
+  "workspaces": [
+    "mobile",
+    "shared"
+  ],
   "overrides": {
     "react": "19.1.0",
     "react-dom": "19.1.0"
@@ -19,6 +22,7 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.104.1",
     "groq-sdk": "^1.1.2",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.11.0",
     "next": "16.2.4",
     "react": "19.1.0",

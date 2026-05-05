@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BellRing } from "lucide-react";
 import { redirect } from "next/navigation";
+import { AppPage, PageHeader } from "@/components/product/page-system";
 import { fetchCyclesForUser } from "@/lib/cycles/queries";
 import { formatCycleDate } from "@/lib/cycles/format";
 import { getProfileForUser } from "@/lib/profiles/queries";
@@ -124,23 +125,18 @@ export default async function RemindersPage({
   );
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-8">
+    <AppPage>
       <ServiceWorkerRegister />
-      <header className="space-y-2 sm:space-y-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">
-          Reminders
-        </p>
-        <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          Reminders
-        </h1>
-        <p className="max-w-2xl text-sm leading-snug text-muted sm:leading-relaxed sm:text-base">
-          Set personal reminders for cycle, medicine, and check-ins. {ZYRA.name} keeps this private
-          to your account.
-        </p>
-        <p className="max-w-2xl text-xs leading-relaxed text-muted">
-          Your reminders are private and only visible to you.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Reminders"
+        title="Reminders"
+        subtitle={
+          <>
+            Set personal reminders for cycle, medicine, and check-ins. {ZYRA.name} keeps this private to your account.
+            <span className="mt-2 block text-xs text-muted">Your reminders are private and only visible to you.</span>
+          </>
+        }
+      />
       <NotificationPermissionPrompt />
 
       <section className="rounded-2xl border border-border/70 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-8">
@@ -299,6 +295,6 @@ export default async function RemindersPage({
         <BellRing className="mr-1 inline size-3.5" aria-hidden />
         Reminders are personal support only — not diagnosis or treatment guidance.
       </p>
-    </div>
+    </AppPage>
   );
 }

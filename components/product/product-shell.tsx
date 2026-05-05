@@ -85,8 +85,8 @@ export function ProductShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <main className="relative flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-8 max-lg:pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10">
+        <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
+          <main className="relative flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-6 sm:py-8 max-lg:pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10">
             <AppPageShell>{children}</AppPageShell>
           </main>
         </div>

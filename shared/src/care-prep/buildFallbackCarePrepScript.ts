@@ -72,7 +72,7 @@ export function buildFallbackCarePrepScript(params: {
   };
 }
 
-/** JSON shape returned by POST /api/careprep-script (Z.A.I generation). */
+/** JSON shape returned by POST /api/careprep-script (Groq generation with local fallback). */
 export type CarePrepScriptAiJson = {
   title: string;
   narration: string;

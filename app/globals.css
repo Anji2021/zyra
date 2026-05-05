@@ -35,3 +35,32 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans-body), system-ui, sans-serif;
 }
+
+/* Hide UI controls from browser print */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Care prep storyboard: slide enter + optional motion reduction */
+@keyframes careprep-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.careprep-slide-enter {
+  animation: careprep-slide-in 0.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .careprep-slide-enter {
+    animation: none;
+  }
+}

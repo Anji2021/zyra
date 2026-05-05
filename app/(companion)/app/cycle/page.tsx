@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AppPage } from "@/components/product/page-system";
 import { CompanionPanel } from "@/components/product/companion-panel";
 import { daysBetweenStarts, fetchCyclesForUser } from "@/lib/cycles/queries";
 import { formatCycleDate } from "@/lib/cycles/format";
@@ -39,7 +40,7 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
   }
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-8">
+    <AppPage>
       <CompanionPanel
         eyebrow="Cycle"
         titleLevel={1}
@@ -131,6 +132,6 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
         </Link>
         .
       </p>
-    </div>
+    </AppPage>
   );
 }

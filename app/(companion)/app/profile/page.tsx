@@ -1,3 +1,4 @@
+import { AppPage } from "@/components/product/page-system";
 import { CompanionPanel } from "@/components/product/companion-panel";
 import { getProfileForUser, hasUserHealthProfileRow } from "@/lib/profiles/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -24,7 +25,7 @@ export default async function ProfilePage() {
   }
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-8">
+    <AppPage>
       {profile ? (
         <ProfileExperience profile={profile} initialHasSavedHealthProfile={hasSavedHealthProfile} />
       ) : (
@@ -39,6 +40,6 @@ export default async function ProfilePage() {
           </p>
         </CompanionPanel>
       )}
-    </div>
+    </AppPage>
   );
 }

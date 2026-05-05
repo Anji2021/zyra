@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { MedicineRow, SymptomRow } from "@shared/types/records";
 import { createClient } from "@/lib/supabase/server";
 import { FRIENDLY_TRY_AGAIN } from "@/lib/zyra/user-messages";
 
-export type LogMedicineState = { error?: string };
-export type LogSymptomState = { error?: string };
+export type LogMedicineState = { error?: string; ok?: true; medicine?: MedicineRow };
+export type LogSymptomState = { error?: string; ok?: true; symptom?: SymptomRow };
 
 function logErr(scope: string, error: { message?: string; code?: string; details?: string; hint?: string }) {
   console.error(`[health-log] ${scope}:`, {
@@ -20,6 +21,9 @@ function logErr(scope: string, error: { message?: string; code?: string; details
 function isIsoDateOnly(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
+
+const medicineSelect = "id,user_id,name,dosage,frequency,start_date,end_date,notes,created_at" as const;
+const symptomSelect = "id,user_id,symptom,severity,logged_date,notes,created_at" as const;
 
 export async function logMedicine(_prev: LogMedicineState, formData: FormData): Promise<LogMedicineState> {
   const supabase = await createClient();
@@ -55,15 +59,19 @@ export async function logMedicine(_prev: LogMedicineState, formData: FormData): 
     return { error: "End date should be on or after the start date." };
   }
 
-  const { error } = await supabase.from("medicines").insert({
-    user_id: user.id,
-    name,
-    dosage,
-    frequency,
-    start_date,
-    end_date,
-    notes,
-  });
+  const { data: medicine, error } = await supabase
+    .from("medicines")
+    .insert({
+      user_id: user.id,
+      name,
+      dosage,
+      frequency,
+      start_date,
+      end_date,
+      notes,
+    })
+    .select(medicineSelect)
+    .single();
 
   if (error) {
     logErr("medicines.insert", error);
@@ -71,7 +79,7 @@ export async function logMedicine(_prev: LogMedicineState, formData: FormData): 
   }
 
   revalidatePath("/app/health-log");
-  redirect("/app/health-log?saved=medicine");
+  return { ok: true, medicine: medicine as MedicineRow };
 }
 
 export async function logSymptom(_prev: LogSymptomState, formData: FormData): Promise<LogSymptomState> {
@@ -107,13 +115,17 @@ export async function logSymptom(_prev: LogSymptomState, formData: FormData): Pr
     severity = n;
   }
 
-  const { error } = await supabase.from("symptoms").insert({
-    user_id: user.id,
-    symptom,
-    severity,
-    logged_date: loggedRaw,
-    notes,
-  });
+  const { data: row, error } = await supabase
+    .from("symptoms")
+    .insert({
+      user_id: user.id,
+      symptom,
+      severity,
+      logged_date: loggedRaw,
+      notes,
+    })
+    .select(symptomSelect)
+    .single();
 
   if (error) {
     logErr("symptoms.insert", error);
@@ -121,5 +133,5 @@ export async function logSymptom(_prev: LogSymptomState, formData: FormData): Pr
   }
 
   revalidatePath("/app/health-log");
-  redirect("/app/health-log?saved=symptom");
+  return { ok: true, symptom: row as SymptomRow };
 }

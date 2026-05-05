@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AppPage, PageHeader } from "@/components/product/page-system";
 import { fetchSavedSpecialistsForUser } from "@/lib/specialists/saved-queries";
 import { createClient } from "@/lib/supabase/server";
 import { ZYRA } from "@/lib/zyra/site";
@@ -19,21 +20,19 @@ export default async function SavedSpecialistsPage() {
   const rows = await fetchSavedSpecialistsForUser(supabase, user.id);
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-8">
-      <header className="space-y-2 sm:space-y-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">
-          Care team
-        </p>
-        <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          Saved specialists
-        </h1>
-        <p className="max-w-2xl text-sm leading-snug text-muted sm:leading-relaxed sm:text-base">
-          Places you wanted to remember from search. {ZYRA.name} doesn&apos;t book visits or
-          verify quality — this is your private shortlist.
-        </p>
-      </header>
+    <AppPage>
+      <PageHeader
+        eyebrow="Care team"
+        title="Saved specialists"
+        subtitle={
+          <>
+            Places you wanted to remember from search. {ZYRA.name} doesn&apos;t book visits or verify quality — this is
+            your private shortlist.
+          </>
+        }
+      />
 
       <SavedSpecialistsList initial={rows} />
-    </div>
+    </AppPage>
   );
 }

@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MessageCircleHeart } from "lucide-react";
-import { formatCycleDate } from "@/lib/cycles/format";
+import { AppPage, PageHeader } from "@/components/product/page-system";
+import { CarePrepVideoStoryboard } from "@/components/insights/care-prep-video-storyboard";
+import { InsightCarePrepContext } from "@/components/insights/insight-care-prep-context";
+import { InsightReportToolbar } from "@/components/insights/insight-report-toolbar";
 import { fetchCyclesForUser } from "@/lib/cycles/queries";
-import {
-  buildCycleInsights,
-  buildMedicineInsights,
-  buildSymptomInsights,
-  hasAnyTracking,
-} from "@/lib/insights/build-summary";
+import { hasAnyTracking, buildCycleInsights, buildMedicineInsights, buildSymptomInsights } from "@/lib/insights/build-summary";
+import { buildInsightSummaryDocument } from "@/lib/insight-summary/build-document";
+import type { DoctorMatchHistoryRow } from "@/lib/insight-summary/types";
 import { fetchMedicinesForUser } from "@/lib/medicines/queries";
 import { getProfileForUser } from "@/lib/profiles/queries";
 import { fetchSymptomsForUser } from "@/lib/symptoms/queries";
@@ -17,21 +17,6 @@ import { GLOBAL_MEDICAL_DISCLAIMER } from "@/lib/zyra/medical-disclaimer";
 import { ZYRA } from "@/lib/zyra/site";
 
 export const dynamic = "force-dynamic";
-
-function formatLoggedAt(iso: string): string {
-  const datePart = iso.slice(0, 10);
-  if (datePart.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-    return formatCycleDate(datePart);
-  }
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { dateStyle: "medium" });
-}
-
-function estimateFootnote(source: "logged-intervals" | "profile" | "default"): string {
-  if (source === "logged-intervals") return "Based on your logged period starts.";
-  if (source === "profile") return "Based on the average cycle length in your profile.";
-  return "Using a simple ~28 day placeholder — add more logs or your profile average for a closer hint.";
-}
 
 export default async function InsightsPage() {
   const supabase = await createClient();
@@ -43,12 +28,31 @@ export default async function InsightsPage() {
     redirect("/?auth=required");
   }
 
-  const [profile, cycles, symptoms, medicines] = await Promise.all([
+  const [profile, cycles, symptoms, medicines, dmResult] = await Promise.all([
     getProfileForUser(supabase, user.id),
     fetchCyclesForUser(supabase, user.id),
     fetchSymptomsForUser(supabase, user.id),
     fetchMedicinesForUser(supabase, user.id),
+    supabase
+      .from("doctor_match_history")
+      .select("symptoms,pattern,specialist,created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(10),
   ]);
+
+  if (dmResult.error) {
+    console.error("[insights page] doctor_match_history:", dmResult.error.message);
+  }
+
+  const doctorMatchHistory = (dmResult.data ?? []) as DoctorMatchHistoryRow[];
+  const report = buildInsightSummaryDocument({
+    profile,
+    cycles,
+    symptoms,
+    medicines,
+    doctorMatchHistory,
+  });
 
   const cycle = buildCycleInsights(profile, cycles);
   const symptom = buildSymptomInsights(symptoms);
@@ -56,260 +60,165 @@ export default async function InsightsPage() {
   const any = hasAnyTracking(cycle, symptom, medicine);
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-8">
-      <header className="space-y-2 sm:space-y-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">
-          Insights
-        </p>
-        <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          Patterns worth noticing
-        </h1>
-        <p className="max-w-2xl text-sm leading-snug text-muted sm:leading-relaxed sm:text-base">
-          Soft summaries from what you chose to log — memory support, not medical advice.
-        </p>
-      </header>
+    <AppPage className="gap-5 sm:gap-7">
+      <div id="insights-report" className="mx-auto flex w-full min-w-0 max-w-[min(100%,52rem)] flex-col gap-5 sm:gap-7">
+        <div className="border-b border-border/50 pb-4">
+          <PageHeader
+            eyebrow="Insights"
+            title="Your Health Insights"
+            subtitle={
+              <>
+                A gentle summary of patterns from your cycle, symptoms, medicines, and DoctorMatch history.
+                <span className="mt-2 block text-[10px] text-muted/85 sm:text-[11px]">
+                  Educational only — not medical advice.
+                </span>
+              </>
+            }
+          />
+        </div>
 
-      <p className="rounded-xl border border-border/60 bg-soft-rose/20 px-3 py-2 text-center text-[11px] leading-relaxed text-muted sm:rounded-2xl sm:px-4 sm:py-2.5 sm:text-xs">
-        {GLOBAL_MEDICAL_DISCLAIMER}
-      </p>
+      <section
+        data-pdf-card
+        className="rounded-2xl border border-border/60 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-5"
+      >
+        <h2 className="font-serif text-base font-semibold text-foreground sm:text-lg">Possible patterns</h2>
+        <p className="mt-0.5 text-[11px] leading-snug text-muted sm:text-xs">Quick highlights from your logs.</p>
+        <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
+          {report.patternCards.map((card) => (
+            <div
+              key={card.id}
+              data-pdf-card
+              className="flex flex-col rounded-xl border border-border/50 bg-background/90 px-3 py-2.5 sm:min-h-[8.5rem] sm:px-3 sm:py-3"
+            >
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-accent">{card.title}</p>
+              <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{card.highlight}</p>
+              <ul className="mt-2 list-inside list-disc space-y-1 text-[11px] leading-snug text-muted marker:text-accent/80">
+                {card.bullets.map((b, i) => (
+                  <li key={`${card.id}-${i}`} className="pl-0.5">
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-center text-[10px] leading-snug text-muted/90 sm:text-[11px]">
+          Educational hints only — not a diagnosis. Discuss concerns with a clinician.
+        </p>
+      </section>
+
+      <section
+        data-pdf-card
+        className="rounded-2xl border border-border/60 bg-background/90 p-4 sm:rounded-3xl sm:p-5"
+      >
+        <h2 className="font-serif text-base font-semibold text-foreground sm:text-lg">Summary</h2>
+        <ul className="mt-2.5 list-inside list-disc space-y-1.5 text-sm leading-snug text-foreground sm:space-y-2 sm:leading-relaxed">
+          {report.summaryBullets.map((b, i) => (
+            <li key={i} className="pl-0.5 marker:text-accent">
+              {b}
+            </li>
+          ))}
+        </ul>
+        {report.unusualPatterns.length > 0 ? (
+          <div
+            data-pdf-card
+            className="mt-3 rounded-lg border border-accent/20 bg-soft-rose/15 px-3 py-2"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Worth reviewing</p>
+            <ul className="mt-1 space-y-1 text-xs leading-snug text-foreground sm:text-sm">
+              {report.unusualPatterns.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-border/60 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+        <h2 className="font-serif text-base font-semibold text-foreground sm:text-lg">Care prep video</h2>
+        <p className="mt-0.5 text-[11px] leading-snug text-muted sm:text-xs">
+          Storyboard preview from your insight summary — educational only, not medical advice.
+        </p>
+        <CarePrepVideoStoryboard report={report} />
+      </section>
+
+      <section
+        data-pdf-card
+        className="rounded-2xl border border-border/60 bg-soft-rose/12 p-4 sm:rounded-3xl sm:p-5"
+      >
+        <h2 className="font-serif text-base font-semibold text-foreground sm:text-lg">Doctor visit prep</h2>
+        <div className="mt-3 space-y-3 text-sm leading-snug sm:leading-relaxed">
+          <div>
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-[11px]">
+              Possible specialist
+            </h3>
+            <p className="mt-1 text-foreground">
+              {report.possibleSpecialist ??
+                "Not specified from recent DoctorMatch — primary care or women’s health may be a starting point to discuss."}
+            </p>
+          </div>
+          <div>
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-[11px]">
+              Questions to ask
+            </h3>
+            <ul className="mt-1 list-inside list-decimal space-y-1 text-foreground">
+              {report.questionsToAsk.map((q, i) => (
+                <li key={i}>{q}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-[11px]">
+              What to bring
+            </h3>
+            <ul className="mt-1 list-inside list-disc space-y-1 text-foreground">
+              {report.doctorVisitChecklist.map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ul>
+          </div>
+          <InsightCarePrepContext carePrepScript={report.carePrepScript} />
+        </div>
+        <InsightReportToolbar report={report} />
+      </section>
 
       {!any ? (
-        <section className="rounded-2xl border border-dashed border-border/80 bg-surface/90 p-5 text-center sm:rounded-3xl sm:p-8">
-          <p className="font-serif text-lg font-semibold text-foreground">No patterns yet</p>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
-            When you log periods, symptoms, or medicines, {ZYRA.name} can reflect gentle trends
-            here — always for your eyes only.
+        <section className="rounded-xl border border-dashed border-border/70 bg-surface/60 px-4 py-4 text-center sm:px-6">
+          <p className="text-sm font-medium text-foreground">Build your report over time</p>
+          <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-muted sm:text-sm">
+            Logging periods, symptoms, or medicines adds depth to these cards — still private to your account.
           </p>
-          <div className="mt-6 flex flex-col gap-2 sm:mx-auto sm:max-w-md sm:flex-row sm:flex-wrap sm:justify-center sm:gap-3">
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
             <Link
               href="/app/cycle"
-              className="inline-flex items-center justify-center rounded-full border border-border bg-background px-5 py-2.5 text-sm font-semibold text-accent transition hover:border-accent/40 hover:bg-soft-rose/30"
+              className="inline-flex rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold text-accent transition hover:bg-soft-rose/40"
             >
               Log period
             </Link>
             <Link
               href="/app/health-log"
-              className="inline-flex items-center justify-center rounded-full border border-border bg-background px-5 py-2.5 text-sm font-semibold text-accent transition hover:border-accent/40 hover:bg-soft-rose/30"
+              className="inline-flex rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold text-accent transition hover:bg-soft-rose/40"
             >
-              Log symptom
+              Health log
             </Link>
             <Link
               href="/app/assistant"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-background px-5 py-2.5 text-sm font-semibold text-accent transition hover:border-accent/40 hover:bg-soft-rose/30"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold text-accent transition hover:bg-soft-rose/40"
             >
-              <MessageCircleHeart className="size-4 shrink-0" aria-hidden />
-              Ask Zyra
+              <MessageCircleHeart className="size-3.5 shrink-0" aria-hidden />
+              Ask {ZYRA.name}
             </Link>
-          </div>
-          <div className="mx-auto mt-8 max-w-lg rounded-2xl border border-border/60 bg-soft-rose/20 p-4 text-left sm:p-5">
-            <h2 className="font-serif text-base font-semibold text-foreground">Gentle reminders</h2>
-            <ul className="mt-2 list-inside list-disc space-y-1.5 text-xs leading-relaxed text-muted sm:text-sm">
-              <li>Keep tracking for more accurate insights.</li>
-              <li>
-                If symptoms are severe, unusual, or persistent, consider talking to a licensed
-                clinician.
-              </li>
-              <li>{ZYRA.name} does not diagnose or prescribe treatment.</li>
-            </ul>
           </div>
         </section>
       ) : null}
 
-      {any ? (
-        <>
-          <section className="rounded-2xl border border-border/70 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
-            <h2 className="font-serif text-lg font-semibold text-foreground sm:text-xl">Cycle patterns</h2>
-            {!cycle.hasCycles ? (
-              <p className="mt-3 text-sm leading-relaxed text-muted">
-                Start tracking your cycle to see personalized insights.
-              </p>
-            ) : (
-              <dl className="mt-4 space-y-3 text-sm sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-3 sm:space-y-0">
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Last period start
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">
-                    {cycle.lastPeriodStart ? formatCycleDate(cycle.lastPeriodStart) : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Logged cycles
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">{cycle.cycleCount}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Average cycle length
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">
-                    {cycle.averageCycleLengthDays != null
-                      ? `About ${cycle.averageCycleLengthDays} days`
-                      : "—"}
-                    {cycle.averageSource === "logged-intervals" ? (
-                      <span className="mt-0.5 block text-xs font-normal text-muted">
-                        From your logged starts.
-                      </span>
-                    ) : cycle.averageSource === "profile" ? (
-                      <span className="mt-0.5 block text-xs font-normal text-muted">
-                        From your profile.
-                      </span>
-                    ) : null}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Rough next period
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">
-                    {cycle.estimatedNextPeriod ? formatCycleDate(cycle.estimatedNextPeriod) : "—"}
-                    <span className="mt-0.5 block text-xs font-normal text-muted">
-                      {estimateFootnote(cycle.estimateSource)}
-                    </span>
-                  </dd>
-                </div>
-              </dl>
-            )}
-            {cycle.irregularityNote ? (
-              <p className="mt-4 rounded-xl border border-border/60 bg-soft-rose/25 px-3 py-2.5 text-xs leading-relaxed text-muted sm:text-sm">
-                {cycle.irregularityNote}
-              </p>
-            ) : null}
-          </section>
-
-          <section className="rounded-2xl border border-border/70 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
-            <h2 className="font-serif text-lg font-semibold text-foreground sm:text-xl">Symptom patterns</h2>
-            {!symptom.hasSymptoms ? (
-              <p className="mt-3 text-sm leading-relaxed text-muted">
-                Log how you&apos;re feeling to build your health history.
-              </p>
-            ) : (
-              <dl className="mt-4 space-y-3 text-sm sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-3 sm:space-y-0">
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Most recent
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">
-                    {symptom.mostRecent?.symptom ?? "—"}
-                    {symptom.mostRecent ? (
-                      <span className="mt-0.5 block text-xs font-normal text-muted">
-                        {formatCycleDate(symptom.mostRecent.logged_date)}
-                        {symptom.mostRecent.severity != null
-                          ? ` · severity ${symptom.mostRecent.severity}/5`
-                          : ""}
-                      </span>
-                    ) : null}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Most frequent name
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">
-                    {symptom.mostFrequent ? (
-                      <>
-                        {symptom.mostFrequent.label}
-                        <span className="mt-0.5 block text-xs font-normal text-muted">
-                          Logged {symptom.mostFrequent.count} times
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-muted">No repeat label yet</span>
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Highest severity logged
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">
-                    {symptom.highestSeverity ? (
-                      <>
-                        {symptom.highestSeverity.symptom}{" "}
-                        <span className="text-muted">({symptom.highestSeverity.severity}/5)</span>
-                        <span className="mt-0.5 block text-xs font-normal text-muted">
-                          {formatCycleDate(symptom.highestSeverity.logged_date)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-muted">No severity scores yet</span>
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Total logs
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">{symptom.totalCount}</dd>
-                </div>
-              </dl>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-border/70 bg-surface/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
-            <h2 className="font-serif text-lg font-semibold text-foreground sm:text-xl">Medicine snapshot</h2>
-            {!medicine.hasMedicines ? (
-              <p className="mt-3 text-sm leading-relaxed text-muted">
-                No medicines on your list yet. Add entries on the Health log when it helps you
-                prepare for visits.
-              </p>
-            ) : (
-              <dl className="mt-4 space-y-3 text-sm sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-3 sm:space-y-0">
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Active medicines
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">{medicine.activeCount}</dd>
-                  <dd className="mt-0.5 text-xs text-muted">
-                    Active means no end date, or end date not passed.
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Total entries
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">{medicine.totalCount}</dd>
-                </div>
-                <div className="sm:col-span-2">
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Most recently added
-                  </dt>
-                  <dd className="mt-1 font-medium text-foreground">
-                    {medicine.mostRecentAdded?.name ?? "—"}
-                    {medicine.mostRecentAdded ? (
-                      <span className="mt-0.5 block text-xs font-normal text-muted">
-                        {formatLoggedAt(medicine.mostRecentAdded.created_at)}
-                      </span>
-                    ) : null}
-                  </dd>
-                </div>
-              </dl>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-border/60 bg-soft-rose/25 p-4 sm:rounded-3xl sm:p-6">
-            <h2 className="font-serif text-lg font-semibold text-foreground sm:text-xl">
-              Gentle reminders
-            </h2>
-            <ul className="mt-3 list-inside list-disc space-y-2 text-sm leading-relaxed text-muted">
-              <li>Keep tracking for more accurate insights.</li>
-              <li>
-                If symptoms are severe, unusual, or persistent, consider talking to a licensed
-                clinician.
-              </li>
-              <li>{ZYRA.name} does not diagnose or prescribe treatment.</li>
-            </ul>
-          </section>
-        </>
-      ) : null}
-
-      {any ? (
-        <p className="text-center text-[11px] leading-relaxed text-muted sm:text-xs">
-          Only you can see this page. Nothing here replaces labs, imaging, or your clinician&apos;s
-          judgment.
-        </p>
-      ) : null}
-    </div>
+        <footer className="space-y-2 border-t border-border/40 pt-4 text-center">
+          <p className="text-[10px] leading-relaxed text-muted sm:text-[11px]">{GLOBAL_MEDICAL_DISCLAIMER}</p>
+          <p className="text-[10px] leading-relaxed text-muted/80">
+            Only you can see this page. Nothing here replaces labs, imaging, or your clinician&apos;s judgment.
+          </p>
+        </footer>
+      </div>
+    </AppPage>
   );
 }

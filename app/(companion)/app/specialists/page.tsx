@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AppPage } from "@/components/product/page-system";
 import { SpecialistsSearch } from "./specialists-search";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,8 +16,8 @@ export default async function SpecialistsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-2 sm:gap-6">
+    <AppPage className="gap-4 pb-1 sm:gap-6 sm:pb-2">
       <SpecialistsSearch />
-    </div>
+    </AppPage>
   );
 }

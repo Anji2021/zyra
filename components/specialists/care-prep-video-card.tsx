@@ -630,7 +630,7 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
       ) : null}
 
       <div className="mt-2 border-t border-border/35 pt-2">
-        <p className="text-[9px] leading-snug text-muted/75">{`Stack: Z.AI for script reasoning · Seedance for video generation · ImaRouter for routing · Butterbase for demo storage/deployment.`}</p>
+        <p className="text-[9px] leading-snug text-muted/75">{`Stack: Groq for script reasoning · Seedance for video generation · ImaRouter for routing · Butterbase for demo storage/deployment.`}</p>
       </div>
 
       {butterbaseSaved ? (

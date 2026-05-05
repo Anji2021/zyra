@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BellRing, Bookmark, BookOpen, MapPinned, Sparkles } from "lucide-react";
+import { AppPage, PageHeader } from "@/components/product/page-system";
 import { ZYRA } from "@/lib/zyra/site";
 
 export const dynamic = "force-dynamic";
@@ -39,17 +40,12 @@ const links = [
 
 export default function MorePage() {
   return (
-    <div className="space-y-5 sm:space-y-8">
-      <header className="space-y-1.5 sm:space-y-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">More</p>
-        <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          Everything else
-        </h1>
-        <p className="max-w-xl text-sm leading-snug text-muted sm:leading-relaxed">
-          A little room for reading, finding care, and revisiting saved picks — without crowding
-          the main tabs.
-        </p>
-      </header>
+    <AppPage>
+      <PageHeader
+        eyebrow="More"
+        title="Everything else"
+        subtitle="A little room for reading, finding care, and revisiting saved picks — without crowding the main tabs."
+      />
 
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
         {links.map(({ href, label, description, icon: Icon }) => (
@@ -74,6 +70,6 @@ export default function MorePage() {
       <p className="text-center text-[11px] leading-relaxed text-muted sm:text-xs">
         {ZYRA.name} keeps learning light — your clinician still leads your care.
       </p>
-    </div>
+    </AppPage>
   );
 }

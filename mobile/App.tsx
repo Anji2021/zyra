@@ -961,7 +961,7 @@ function DoctorMatchScreen({
               </Text>
               <View style={styles.carePrepOrchestrationBox}>
                 <Text style={styles.carePrepStackNote}>
-                  Stack: Z.AI for script reasoning · Seedance for video generation · ImaRouter for routing · Butterbase for demo storage/deployment.
+                  Stack: Groq for script reasoning · Seedance for video generation · ImaRouter for routing · Butterbase for demo storage/deployment.
                 </Text>
               </View>
               {carePrepButterbaseSaved ? (
