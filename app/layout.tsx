@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { DM_Sans, Lora } from "next/font/google";
 import Script from "next/script";
 import { GaDevLogger, GoogleAnalyticsRouteViews } from "@/components/analytics/google-analytics";
-import { defaultTitle, ZYRA } from "@/lib/zyra/site";
+import { defaultTitle, getSiteOrigin, ZYRA } from "@/lib/zyra/site";
 import "./globals.css";
 
 const gaMeasurementId = process.env.NEXT_PUBLIC_GA_ID?.trim();
@@ -48,7 +48,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000"),
+  metadataBase: new URL(getSiteOrigin()),
   title: {
     default: defaultTitle,
     template: `%s — ${ZYRA.name}`,

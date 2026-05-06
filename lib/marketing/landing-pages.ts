@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-
-const SITE_URL = "https://zyra-gold.vercel.app";
+import { getSiteOrigin } from "@/lib/zyra/site";
 
 export type LandingPageKey =
   | "symptom-tracker"
@@ -350,4 +349,5 @@ export function getLandingPageMetadata(slug: LandingPageKey): Metadata {
   };
 }
 
-export const LANDING_SITE_URL = SITE_URL;
+/** Absolute site URL for structured data props (landing + topic pages). */
+export const LANDING_SITE_URL = getSiteOrigin();

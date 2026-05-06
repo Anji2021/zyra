@@ -3,13 +3,7 @@ import Link from "next/link";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { LandingDoctorMatch } from "@/components/marketing/landing-doctor-match";
 import { SeoJsonLd } from "@/components/seo/json-ld";
-import { defaultTitle, ZYRA } from "@/lib/zyra/site";
-
-function marketingSiteUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (raw) return raw.replace(/\/$/, "");
-  return "http://localhost:3000";
-}
+import { defaultTitle, getSiteOrigin, ZYRA } from "@/lib/zyra/site";
 
 const faqItems = [
   {
@@ -76,7 +70,7 @@ export const metadata: Metadata = {
 };
 
 export default function MarketingHomePage() {
-  const siteUrl = marketingSiteUrl();
+  const siteUrl = getSiteOrigin();
   const webAppJsonLd = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
