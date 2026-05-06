@@ -61,6 +61,9 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  verification: {
+    google: "_0xv9XUXcjdUY1tTnXt1shAQwHu5uP7G8u6MDrGwe0I",
+  },
   openGraph: {
     title: defaultTitle,
     description: ZYRA.description,
