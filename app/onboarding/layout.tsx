@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <header className="border-b border-border/80 bg-surface/90 px-5 py-4 backdrop-blur-md sm:px-8">
+      <header className="border-b border-border/80 bg-surface/90 px-5 py-4 backdrop-blur-none sm:px-8 md:backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
           <Link href="/" className="font-serif text-lg font-semibold tracking-tight">
             {ZYRA.name}

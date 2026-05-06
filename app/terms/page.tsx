@@ -5,6 +5,23 @@ import { ZYRA } from "@/lib/zyra/site";
 export const metadata: Metadata = {
   title: `Terms of use — ${ZYRA.name}`,
   description: `Terms and conditions for using ${ZYRA.name}.`,
+  alternates: {
+    canonical: "/terms",
+  },
+  openGraph: {
+    title: `Terms of use — ${ZYRA.name}`,
+    description: `Terms and conditions for using ${ZYRA.name}.`,
+    type: "website",
+    url: "/terms",
+    siteName: ZYRA.name,
+    images: [{ url: "/zyra-icon-512.png", width: 512, height: 512, alt: `${ZYRA.name} logo` }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `Terms of use — ${ZYRA.name}`,
+    description: `Terms and conditions for using ${ZYRA.name}.`,
+    images: ["/zyra-icon-512.png"],
+  },
 };
 
 export default function TermsPage() {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TopicGuidesStrip } from "@/components/marketing/topic-guides-strip";
 import { redirect } from "next/navigation";
 import { MessageCircleHeart } from "lucide-react";
 import { AppPage, PageHeader } from "@/components/product/page-system";
@@ -211,6 +212,8 @@ export default async function InsightsPage() {
           </div>
         </section>
       ) : null}
+
+        <TopicGuidesStrip variant="insights" />
 
         <footer className="space-y-2 border-t border-border/40 pt-4 text-center">
           <p className="text-[10px] leading-relaxed text-muted sm:text-[11px]">{GLOBAL_MEDICAL_DISCLAIMER}</p>

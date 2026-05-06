@@ -55,10 +55,10 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user) {
-    const needsProfileCheck =
-      pathname === "/" || pathname.startsWith("/app") || pathname.startsWith("/onboarding");
+    const isAppOrOnboarding =
+      pathname.startsWith("/app") || pathname.startsWith("/onboarding");
 
-    if (needsProfileCheck) {
+    if (isAppOrOnboarding) {
       const profile = await getProfileForUser(supabase, user.id);
       const complete = isProfileComplete(profile);
 
@@ -70,18 +70,6 @@ export async function updateSession(request: NextRequest) {
 
       if (!complete && pathname.startsWith("/app")) {
         const next = NextResponse.redirect(new URL("/onboarding", request.url));
-        copyCookies(supabaseResponse, next);
-        return next;
-      }
-
-      if (!complete && pathname === "/") {
-        const next = NextResponse.redirect(new URL("/onboarding", request.url));
-        copyCookies(supabaseResponse, next);
-        return next;
-      }
-
-      if (complete && pathname === "/") {
-        const next = NextResponse.redirect(new URL("/app", request.url));
         copyCookies(supabaseResponse, next);
         return next;
       }

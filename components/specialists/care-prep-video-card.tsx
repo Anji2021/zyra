@@ -702,8 +702,8 @@ export function CarePrepVideoCard({ symptoms, recommendation }: CarePrepVideoCar
                 className="mt-2 w-full max-h-[min(70vh,520px)] rounded-lg border border-border/80 bg-black/5 object-contain"
                 src={videoUrl}
                 controls
-                autoPlay
                 playsInline
+                preload="none"
                 title={generated.videoTitle}
               />
             </>

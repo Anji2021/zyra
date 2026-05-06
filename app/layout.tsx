@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans, Lora } from "next/font/google";
 import Script from "next/script";
 import { GaDevLogger, GoogleAnalyticsRouteViews } from "@/components/analytics/google-analytics";
@@ -13,50 +13,76 @@ const sans = DM_Sans({
   variable: "--font-sans-body",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+  display: "swap",
+  adjustFontFallback: true,
+  preload: true,
 });
 
 const serif = Lora({
   variable: "--font-serif-display",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+  display: "swap",
+  adjustFontFallback: true,
+  preload: true,
 });
 
+const siteKeywords = [
+  "women's health app",
+  "AI health companion",
+  "women's health companion",
+  "symptom tracker",
+  "cycle tracker",
+  "private health insights",
+  "reproductive health",
+  "care preparation",
+  "period tracker",
+  "cycle tracking",
+  "PCOS support",
+  "women's health AI assistant",
+] as const;
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000"),
   title: {
     default: defaultTitle,
     template: `%s — ${ZYRA.name}`,
   },
   description: ZYRA.description,
-  keywords: [
-    "women's health companion",
-    "period tracker",
-    "cycle tracking",
-    "PCOS support",
-    "symptom tracker",
-    "women's health AI assistant",
-  ],
+  keywords: [...siteKeywords],
+  applicationName: ZYRA.name,
+  referrer: "strict-origin-when-cross-origin",
+  robots: {
+    index: true,
+    follow: true,
+  },
   openGraph: {
     title: defaultTitle,
     description: ZYRA.description,
     type: "website",
+    locale: "en_US",
     siteName: ZYRA.name,
-    images: [{ url: "/zyra-icon.png", width: 512, height: 512, alt: `${ZYRA.name} logo` }],
+    images: [{ url: "/zyra-icon-512.png", width: 512, height: 512, alt: `${ZYRA.name} logo` }],
   },
   twitter: {
     card: "summary_large_image",
     title: defaultTitle,
     description: ZYRA.description,
-    images: ["/zyra-icon.png"],
+    images: ["/zyra-icon-512.png"],
   },
   icons: {
     icon: [
       { url: "/zyra-icon.svg", type: "image/svg+xml" },
       { url: "/zyra-icon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/zyra-icon-64.png", sizes: "64x64", type: "image/png" },
-      { url: "/zyra-icon.png", sizes: "512x512", type: "image/png" },
+      { url: "/zyra-icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/zyra-icon.png", sizes: "512x512", type: "image/png" }],
+    apple: [{ url: "/zyra-icon-192.png", sizes: "192x192", type: "image/png" }],
   },
 };
 

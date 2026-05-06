@@ -24,8 +24,8 @@ self.addEventListener("push", (event) => {
       typeof parsed.body === "string" && parsed.body
         ? parsed.body
         : "You have a reminder from Zyra.",
-    icon: "/zyra-icon.png",
-    badge: "/zyra-icon.png",
+    icon: "/zyra-icon-192.png",
+    badge: "/zyra-icon-192.png",
     data: {
       url:
         typeof parsed.url === "string" && parsed.url

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { TopicGuidesStrip } from "@/components/marketing/topic-guides-strip";
 import { AppPage } from "@/components/product/page-system";
 import { SpecialistsSearch } from "./specialists-search";
 import { createClient } from "@/lib/supabase/server";
@@ -17,6 +18,7 @@ export default async function SpecialistsPage() {
 
   return (
     <AppPage className="gap-4 pb-1 sm:gap-6 sm:pb-2">
+      <TopicGuidesStrip variant="specialists" />
       <SpecialistsSearch />
     </AppPage>
   );

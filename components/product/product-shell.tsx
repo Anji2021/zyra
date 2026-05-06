@@ -93,7 +93,7 @@ export function ProductShell({
       </div>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-border/80 bg-surface/95 px-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-4px_20px_-10px_rgba(42,38,44,0.07)] backdrop-blur-md lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-border/80 bg-surface/95 px-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-4px_20px_-10px_rgba(42,38,44,0.07)] backdrop-blur-none md:backdrop-blur-md lg:hidden"
         aria-label="Primary"
       >
         <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-1">

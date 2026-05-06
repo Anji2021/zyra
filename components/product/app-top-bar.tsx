@@ -55,7 +55,7 @@ export function AppTopBar({ email, displayName, avatarUrl }: AppTopBarProps) {
   }
 
   return (
-    <header className="relative z-50 flex items-center justify-between gap-2 border-b border-border bg-surface/95 px-3 py-2 backdrop-blur-sm sm:gap-3 sm:px-6 sm:py-3">
+    <header className="relative z-50 flex items-center justify-between gap-2 border-b border-border bg-surface/95 px-3 py-2 backdrop-blur-none sm:gap-3 sm:px-6 sm:py-3 md:backdrop-blur-sm">
       <Link
         href="/app"
         className="shrink-0 font-serif text-base font-semibold tracking-tight text-foreground sm:text-lg"
@@ -83,6 +83,7 @@ export function AppTopBar({ email, displayName, avatarUrl }: AppTopBarProps) {
                 alt=""
                 width={32}
                 height={32}
+                sizes="32px"
                 unoptimized
                 className="size-7 shrink-0 rounded-full object-cover sm:size-8"
               />
@@ -98,7 +99,7 @@ export function AppTopBar({ email, displayName, avatarUrl }: AppTopBarProps) {
               {label}
             </span>
             <ChevronDown
-              className={`size-3.5 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+              className={`size-3.5 shrink-0 text-muted motion-reduce:transition-none ${open ? "rotate-180" : ""} transition-transform duration-200`}
               aria-hidden
             />
           </button>

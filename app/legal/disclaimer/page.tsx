@@ -1,10 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ZYRA, defaultTitle } from "@/lib/zyra/site";
+import { ZYRA } from "@/lib/zyra/site";
 
 export const metadata: Metadata = {
-  title: `Medical disclaimer — ${defaultTitle}`,
+  title: `Medical disclaimer — ${ZYRA.name}`,
   description: `${ZYRA.name} medical disclaimer and limitations of use.`,
+  alternates: {
+    canonical: "/legal/disclaimer",
+  },
+  openGraph: {
+    title: `Medical disclaimer — ${ZYRA.name}`,
+    description: `${ZYRA.name} medical disclaimer and limitations of use.`,
+    type: "website",
+    url: "/legal/disclaimer",
+    siteName: ZYRA.name,
+    images: [{ url: "/zyra-icon-512.png", width: 512, height: 512, alt: `${ZYRA.name} logo` }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `Medical disclaimer — ${ZYRA.name}`,
+    description: `${ZYRA.name} medical disclaimer and limitations of use.`,
+    images: ["/zyra-icon-512.png"],
+  },
 };
 
 export default function DisclaimerPage() {

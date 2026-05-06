@@ -5,6 +5,23 @@ import { ZYRA } from "@/lib/zyra/site";
 export const metadata: Metadata = {
   title: `Privacy policy — ${ZYRA.name}`,
   description: `How ${ZYRA.name} handles privacy and personal health information.`,
+  alternates: {
+    canonical: "/privacy",
+  },
+  openGraph: {
+    title: `Privacy policy — ${ZYRA.name}`,
+    description: `How ${ZYRA.name} handles privacy and personal health information.`,
+    type: "website",
+    url: "/privacy",
+    siteName: ZYRA.name,
+    images: [{ url: "/zyra-icon-512.png", width: 512, height: 512, alt: `${ZYRA.name} logo` }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `Privacy policy — ${ZYRA.name}`,
+    description: `How ${ZYRA.name} handles privacy and personal health information.`,
+    images: ["/zyra-icon-512.png"],
+  },
 };
 
 export default function PrivacyPage() {
