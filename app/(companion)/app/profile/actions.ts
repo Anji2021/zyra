@@ -13,7 +13,13 @@ import type { ProfileRow } from "@/lib/profiles/types";
 import { mergeProfileRows } from "@/lib/profiles/queries";
 import { createClient } from "@/lib/supabase/server";
 
-export type ProfileSaveState = { error?: string; success?: boolean };
+export type ProfileSaveState = {
+  success?: boolean;
+  /** Shown in the form; validation vs generic UI copy is determined by `persistFailed`. */
+  error?: string;
+  /** True when load/DB upsert failed — form shows a generic “couldn’t save” message. */
+  persistFailed?: boolean;
+};
 
 const ALLOWED_RADIUS = new Set([5, 10, 25]);
 
@@ -69,11 +75,15 @@ export async function saveProfile(_prev: ProfileSaveState, formData: FormData): 
     return {
       error:
         "We couldn't load your profile to apply changes. Check your connection and try again — if this persists, contact support.",
+      persistFailed: true,
     };
   }
 
   if (!profilesRaw || typeof profilesRaw !== "object") {
-    return { error: "No profile found. Finish onboarding first, then try again." };
+    return {
+      error: "No profile found. Finish onboarding first, then try again.",
+      persistFailed: true,
+    };
   }
 
   if (healthFetchErr) {
@@ -171,7 +181,7 @@ export async function saveProfile(_prev: ProfileSaveState, formData: FormData): 
 
   if (profilesUpdateErr) {
     logSupabaseError("profiles.update(basics)", profilesUpdateErr);
-    return { error: friendlyUpsertMessage(profilesUpdateErr) };
+    return { error: friendlyUpsertMessage(profilesUpdateErr), persistFailed: true };
   }
 
   const healthPayload = {
@@ -194,7 +204,7 @@ export async function saveProfile(_prev: ProfileSaveState, formData: FormData): 
 
   if (healthUpsertErr) {
     logSupabaseError("user_health_profile.upsert", healthUpsertErr);
-    return { error: friendlyUpsertMessage(healthUpsertErr) };
+    return { error: friendlyUpsertMessage(healthUpsertErr), persistFailed: true };
   }
 
   revalidatePath("/app/profile");

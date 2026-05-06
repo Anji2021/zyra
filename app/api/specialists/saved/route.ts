@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { fetchSavedSpecialistsForUser, isSavedSpecialistsSchemaMismatchError } from "@/lib/specialists/saved-queries";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 import { FRIENDLY_TRY_AGAIN } from "@/lib/zyra/user-messages";
 
@@ -44,22 +45,32 @@ export async function GET() {
       return Response.json({ error: "Sign in to view saved specialists." }, { status: 401 });
     }
 
-    const { data, error } = await supabase
-      .from("saved_specialists")
-      .select("id,name,address,place_id,rating,created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    const rows = await fetchSavedSpecialistsForUser(supabase, user.id);
+    const items = rows.map(({ user_id: _omit, ...rest }) => rest);
 
-    if (error) {
-      console.error("[api/specialists/saved] GET", error.message);
-      return Response.json({ error: FRIENDLY_TRY_AGAIN }, { status: 500 });
-    }
-
-    return Response.json({ items: data ?? [] });
+    return Response.json({ items });
   } catch (e) {
     console.error("[api/specialists/saved] GET", e);
     return Response.json({ error: FRIENDLY_TRY_AGAIN }, { status: 500 });
   }
+}
+
+function parseRating(value: unknown): number | null {
+  if (typeof value === "number" && !Number.isNaN(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (!Number.isNaN(n)) return n;
+  }
+  return null;
+}
+
+function parseOptionalInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number.parseInt(value, 10);
+    if (!Number.isNaN(n)) return n;
+  }
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -90,7 +101,8 @@ export async function POST(request: Request) {
       return Response.json({ error: "Invalid body." }, { status: 400 });
     }
 
-    const placeId = String((body as { place_id?: unknown }).place_id ?? "").trim();
+    const b = body as Record<string, unknown>;
+    const placeId = String(b.place_id ?? "").trim();
     if (!placeId) {
       return Response.json({ error: "place_id is required to save a specialist." }, { status: 400 });
     }
@@ -116,24 +128,50 @@ export async function POST(request: Request) {
       return Response.json({ saved: false, place_id: placeId });
     }
 
-    const name = String((body as { name?: unknown }).name ?? "").trim() || null;
-    const address = String((body as { address?: unknown }).address ?? "").trim() || null;
-    const ratingRaw = (body as { rating?: unknown }).rating;
-    let rating: number | null = null;
-    if (typeof ratingRaw === "number" && !Number.isNaN(ratingRaw)) {
-      rating = ratingRaw;
-    } else if (typeof ratingRaw === "string" && ratingRaw.trim() !== "") {
-      const n = Number(ratingRaw);
-      if (!Number.isNaN(n)) rating = n;
-    }
+    const name = String(b.name ?? "").trim() || null;
+    const address = String(b.address ?? "").trim() || null;
+    const rating = parseRating(b.rating);
+    const review_count = parseOptionalInt(b.review_count ?? (b.reviewCount as unknown));
+    const maps_url =
+      typeof b.maps_url === "string" && b.maps_url.trim() ? String(b.maps_url).trim().slice(0, 4096) : null;
+    const phone = typeof b.phone === "string" && b.phone.trim() ? String(b.phone).trim().slice(0, 80) : null;
+    const website = typeof b.website === "string" && b.website.trim() ? String(b.website).trim().slice(0, 2048) : null;
+    const specialist_type =
+      typeof b.specialist_type === "string" && b.specialist_type.trim()
+        ? String(b.specialist_type).trim().slice(0, 160)
+        : null;
+    const search_location =
+      typeof b.search_location === "string" && b.search_location.trim()
+        ? String(b.search_location).trim().slice(0, 300)
+        : null;
 
-    const { error: insError } = await supabase.from("saved_specialists").insert({
+    const insertPayload: Record<string, unknown> = {
       user_id: user.id,
       place_id: placeId,
       name,
       address,
       rating,
-    });
+      review_count,
+      maps_url,
+      phone,
+      website,
+      specialist_type,
+      search_location,
+    };
+
+    const insertMinimal: Record<string, unknown> = {
+      user_id: user.id,
+      place_id: placeId,
+      name,
+      address,
+      rating,
+    };
+
+    let insError = (await supabase.from("saved_specialists").insert(insertPayload)).error;
+    if (insError && isSavedSpecialistsSchemaMismatchError(insError.message)) {
+      console.warn("[api/specialists/saved] insert extended failed; retry minimal columns.");
+      insError = (await supabase.from("saved_specialists").insert(insertMinimal)).error;
+    }
 
     if (insError) {
       console.error("[api/specialists/saved] insert", insError.message);

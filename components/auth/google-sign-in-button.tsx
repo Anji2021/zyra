@@ -2,7 +2,9 @@
 
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import type { MarketingAuthModalMode } from "@/components/auth/marketing-auth-shell";
+import { useOptionalMarketingAuthChoice } from "@/components/auth/marketing-auth-shell";
+import { startGoogleOAuthSignIn } from "@/components/auth/oauth-google-client";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 
 type Variant = "primary" | "outline" | "nav";
@@ -19,49 +21,56 @@ type GoogleSignInButtonProps = {
   variant?: Variant;
   className?: string;
   label?: string;
+  /**
+   * Skip the marketing auth modal and start Google OAuth immediately.
+   * Useful outside `MarketingAuthShell` or for dedicated Google-only flows.
+   */
+  forceDirectGoogleOAuth?: boolean;
+  /** Initial tab when opened via marketing auth modal. Defaults to `signin`. */
+  modalInitialMode?: MarketingAuthModalMode;
 };
 
 export function GoogleSignInButton({
   variant = "primary",
   className = "",
   label = "Sign in with Google",
+  forceDirectGoogleOAuth = false,
+  modalInitialMode = "signin",
 }: GoogleSignInButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isConfigured } = getSupabasePublicEnv();
+  const openMarketingAuth = useOptionalMarketingAuthChoice();
 
-  async function handleSignIn() {
+  async function runGoogleOAuth() {
     setError(null);
     if (!isConfigured) {
       setError("Supabase is not configured. Check .env.local.");
       return;
     }
     setLoading(true);
-    try {
-      const supabase = createClient();
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      if (oauthError) {
-        console.error("[GoogleSignIn] signInWithOAuth failed:", oauthError.message, oauthError);
-        setError(oauthError.message);
-        setLoading(false);
-      }
-    } catch (e) {
-      console.error("[GoogleSignIn] Unexpected error:", e);
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+    const errMsg = await startGoogleOAuthSignIn();
+    if (errMsg) {
+      console.error("[GoogleSignIn] OAuth failed:", errMsg);
+      setError(errMsg);
       setLoading(false);
     }
+  }
+
+  function handleClick() {
+    setError(null);
+    if (!forceDirectGoogleOAuth && openMarketingAuth) {
+      openMarketingAuth({ mode: modalInitialMode });
+      return;
+    }
+    void runGoogleOAuth();
   }
 
   return (
     <div className={className}>
       <button
         type="button"
-        onClick={handleSignIn}
+        onClick={handleClick}
         disabled={loading || !isConfigured}
         className={styles[variant]}
       >

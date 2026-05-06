@@ -173,7 +173,7 @@ export function ProgrammaticTopicPage({ topic, slug, related, siteUrl }: Program
                 Use cycle and health logging alongside educational insights—not as a substitute for clinicians.
               </p>
               <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-                <GoogleSignInButton variant="primary" label="Open the app" />
+                <GoogleSignInButton variant="primary" label="Open the app" modalInitialMode="signup" />
                 <Link
                   href="/app/insights"
                   className="inline-flex min-h-11 items-center rounded-full border border-border px-5 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"

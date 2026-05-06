@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ProfileRow } from "@/lib/profiles/types";
 import {
   HEALTH_CONCERN_OPTIONS,
@@ -13,6 +13,15 @@ import {
   SYMPTOM_BASELINE_OPTIONS,
 } from "@/lib/profiles/profile-clarity-options";
 import { type ProfileSaveState, saveProfile } from "./actions";
+
+type SaveStatus = "idle" | "saving" | "success" | "error";
+
+function formatLastSaved(d: Date): string {
+  const diffSec = Math.round((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 90) return "Last saved just now.";
+  if (diffSec < 3600) return `Last saved ${Math.floor(diffSec / 60)} min ago.`;
+  return `Last saved ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}.`;
+}
 
 function sectionCard(title: string, children: React.ReactNode) {
   return (
@@ -67,30 +76,48 @@ type ProfileFormProps = {
   profile: ProfileRow;
   variant: "setup" | "edit";
   onCancel?: () => void;
-  /** Called once after successful save (e.g. refresh + return to summary). */
+  /** After success UI (~2.8s): leave setup/edit flow and refresh profile from server (parent controls). */
   onSaved?: () => void;
 };
 
-export function ProfileForm({ profile, variant, onCancel, onSaved }: ProfileFormProps) {
-  const [state, formAction, pending] = useActionState<ProfileSaveState, FormData>(saveProfile, {});
-  const didFireSavedRef = useRef(false);
+const SUCCESS_UI_MS = 2800;
 
-  useEffect(() => {
-    if (!state.success) {
-      didFireSavedRef.current = false;
-      return;
-    }
-    if (didFireSavedRef.current) return;
-    didFireSavedRef.current = true;
-    onSaved?.();
-  }, [state.success, onSaved]);
+export function ProfileForm({ profile, variant, onCancel, onSaved }: ProfileFormProps) {
+  const saveIdleResetTimerRef = useRef<number | null>(null);
+
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<"validation" | "persist" | null>(null);
+  const [persistDetailMessage, setPersistDetailMessage] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [, setLastSavedTick] = useState(0);
 
   const [knownConditions, setKnownConditions] = useState<string[]>(() => initialKnown(profile));
   const [healthConcerns, setHealthConcerns] = useState<string[]>(() => [...profile.health_concerns]);
   const [symptomBaselines, setSymptomBaselines] = useState<string[]>(() => [...profile.symptom_baselines]);
   const [profileGoals, setProfileGoals] = useState<string[]>(() => initialProfileGoalSlugs(profile));
-
   const [cycleReg, setCycleReg] = useState<"regular" | "irregular" | "unsure">(() => profile.cycle_regularity);
+
+  useEffect(() => {
+    return () => {
+      if (saveIdleResetTimerRef.current) {
+        window.clearTimeout(saveIdleResetTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (saveStatus !== "success" || !lastSavedAt) return;
+    const id = window.setInterval(() => setLastSavedTick((t) => t + 1), 15_000);
+    return () => window.clearInterval(id);
+  }, [saveStatus, lastSavedAt]);
+
+  function clearIdleTimer() {
+    if (saveIdleResetTimerRef.current) {
+      window.clearTimeout(saveIdleResetTimerRef.current);
+      saveIdleResetTimerRef.current = null;
+    }
+  }
 
   function toggleList(list: string[], setList: (v: string[]) => void, slug: string) {
     setList(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
@@ -108,8 +135,77 @@ export function ProfileForm({ profile, variant, onCancel, onSaved }: ProfileForm
     });
   }
 
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    console.log("Profile save started");
+
+    clearIdleTimer();
+    setSaveStatus("saving");
+    setSaveMessage(null);
+    setErrorKind(null);
+    setPersistDetailMessage(null);
+
+    const emptyPrev: ProfileSaveState = {};
+
+    try {
+      const fd = new FormData(e.currentTarget);
+      const result = await saveProfile(emptyPrev, fd);
+
+      if (result.success) {
+        console.log("Profile save success");
+        const successCopy =
+          variant === "edit" ? "Profile updated successfully." : "Profile saved — you’re ready to personalize Zyra.";
+        setSaveStatus("success");
+        setSaveMessage(successCopy);
+        setLastSavedAt(new Date());
+
+        saveIdleResetTimerRef.current = window.setTimeout(() => {
+          saveIdleResetTimerRef.current = null;
+          setSaveStatus("idle");
+          setSaveMessage(null);
+          if (variant === "edit") {
+            console.log("LIVE profile save success - returning to overview");
+          }
+          onSaved?.();
+        }, SUCCESS_UI_MS);
+
+        return;
+      }
+
+      if (result.error) {
+        console.error("Profile save failed", result.error);
+        const persist = Boolean(result.persistFailed);
+        setSaveStatus("error");
+        setErrorKind(persist ? "persist" : "validation");
+        setSaveMessage(
+          persist ? "We couldn’t save your profile. Please try again." : result.error,
+        );
+        setPersistDetailMessage(persist && result.error ? result.error : null);
+      }
+    } catch (err) {
+      console.error("Profile save failed", err);
+      setSaveStatus("error");
+      setErrorKind("persist");
+      setSaveMessage("We couldn’t save your profile. Please try again.");
+      setPersistDetailMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  const isSaving = saveStatus === "saving";
+
+  const submitLabel =
+    isSaving ? "Saving…"
+    : saveStatus === "success" ? "Saved"
+    : saveStatus === "error" && errorKind === "persist" ? "Couldn’t save"
+    : variant === "edit" ? "Save changes"
+    : "Save profile";
+
+  /** Disable duplicate submits while in-flight or while showing success shimmer. Persist errors stay clickable to retry. */
+  const submitDisabled = isSaving || saveStatus === "success";
+
   return (
-    <form action={formAction} className="space-y-4 sm:space-y-5">
+    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 sm:space-y-5">
       <div className="rounded-2xl border border-accent/25 bg-soft-rose/35 p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground">Clarity Plan</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">
@@ -328,36 +424,50 @@ export function ProfileForm({ profile, variant, onCancel, onSaved }: ProfileForm
         </fieldset>,
       )}
 
-      {state.success ? (
-        <p className="rounded-xl border border-emerald-200/80 bg-emerald-50 px-4 py-3 text-sm text-emerald-950" role="status">
-          {variant === "edit" ? "Changes saved." : "Profile saved — you’re ready to personalize Zyra."}
-        </p>
-      ) : null}
+      <div className="space-y-3 rounded-2xl border border-border/70 bg-surface/95 p-4 sm:p-5">
+        <div aria-live="polite" aria-atomic="true" className="min-h-0 space-y-2">
+          {saveStatus === "success" && saveMessage ? (
+            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50 px-4 py-3 text-sm text-emerald-950" role="status">
+              <p className="font-medium">{saveMessage}</p>
+              {lastSavedAt ? (
+                <p className="mt-1.5 text-xs text-emerald-900/85">{formatLastSaved(lastSavedAt)}</p>
+              ) : null}
+            </div>
+          ) : null}
 
-      {state.error ? (
-        <p className="rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
-          {state.error}
-        </p>
-      ) : null}
+          {saveStatus === "idle" && lastSavedAt && variant === "edit" ? (
+            <p className="text-xs text-muted">{formatLastSaved(lastSavedAt)}</p>
+          ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        {variant === "edit" && onCancel ? (
+          {saveStatus === "error" && saveMessage ? (
+            <div className="rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-950" role="alert">
+              <p className="font-medium">{saveMessage}</p>
+              {errorKind === "persist" && persistDetailMessage ? (
+                <p className="mt-2 text-xs leading-relaxed text-red-900/90">{persistDetailMessage}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          {variant === "edit" && onCancel ? (
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={onCancel}
+              className="inline-flex h-11 w-full items-center justify-center rounded-full border border-border bg-background px-6 text-sm font-semibold text-foreground transition hover:border-accent/35 hover:bg-soft-rose/25 disabled:opacity-60 sm:w-auto sm:order-first"
+            >
+              Cancel
+            </button>
+          ) : null}
           <button
-            type="button"
-            disabled={pending}
-            onClick={onCancel}
-            className="inline-flex h-11 w-full items-center justify-center rounded-full border border-border bg-background px-6 text-sm font-semibold text-foreground transition hover:border-accent/35 hover:bg-soft-rose/25 disabled:opacity-60 sm:w-auto sm:order-first"
+            type="submit"
+            disabled={submitDisabled}
+            className="inline-flex h-11 min-w-[10.5rem] w-full items-center justify-center rounded-full bg-accent px-6 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:opacity-60 sm:w-auto"
           >
-            Cancel
+            {submitLabel}
           </button>
-        ) : null}
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex h-11 w-full items-center justify-center rounded-full bg-accent px-6 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:opacity-60 sm:w-auto"
-        >
-          {pending ? "Saving…" : variant === "edit" ? "Save changes" : "Save profile"}
-        </button>
+        </div>
       </div>
 
       {variant === "setup" ? (

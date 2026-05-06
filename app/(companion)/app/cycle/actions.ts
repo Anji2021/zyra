@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { fetchCyclesForUser } from "@/lib/cycles/queries";
+import { calendarTodayIso, isIsoDateOnly, validateCycleEntry } from "@/lib/cycles/validation";
 import { createClient } from "@/lib/supabase/server";
 import { FRIENDLY_TRY_AGAIN } from "@/lib/zyra/user-messages";
 
@@ -16,10 +18,6 @@ function logSupabaseError(scope: string, error: { message?: string; code?: strin
     details: error.details,
     hint: error.hint,
   });
-}
-
-function isIsoDateOnly(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 export async function logPeriod(_prev: LogCycleState, formData: FormData): Promise<LogCycleState> {
@@ -43,19 +41,21 @@ export async function logPeriod(_prev: LogCycleState, formData: FormData): Promi
   if (!startRaw) {
     return { error: "Please choose a start date for this period." };
   }
-  if (!isIsoDateOnly(startRaw)) {
-    return { error: "Start date does not look valid. Please pick it again from the calendar." };
-  }
 
   let end_date: string | null = null;
   if (endRaw.length > 0) {
-    if (!isIsoDateOnly(endRaw)) {
-      return { error: "End date does not look valid. Please pick it again from the calendar." };
-    }
-    if (endRaw < startRaw) {
-      return { error: "End date should be the same day or after the start date." };
-    }
     end_date = endRaw;
+  }
+
+  const cycles = await fetchCyclesForUser(supabase, user.id);
+  const today = calendarTodayIso();
+  const v = validateCycleEntry({
+    existing: cycles,
+    draft: { start_date: startRaw, end_date: end_date },
+    today,
+  });
+  if (!v.ok) {
+    return { error: v.error };
   }
 
   const notes = notesRaw.length > 0 ? notesRaw : null;
@@ -78,7 +78,7 @@ export async function logPeriod(_prev: LogCycleState, formData: FormData): Promi
   redirect("/app/cycle?saved=1");
 }
 
-export async function updateCycleEntry(cycleId: string, formData: FormData): Promise<void> {
+export async function updateCycleEntryAction(_prev: LogCycleState, formData: FormData): Promise<LogCycleState> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -87,19 +87,35 @@ export async function updateCycleEntry(cycleId: string, formData: FormData): Pro
   if (userError) logSupabaseError("update getUser", userError);
   if (!user) redirect("/?auth=required");
 
+  const cycleId = String(formData.get("cycle_id") ?? "").trim();
   const startRaw = String(formData.get("start_date") ?? "").trim();
   const endRaw = String(formData.get("end_date") ?? "").trim();
   const notesRaw = String(formData.get("notes") ?? "").trim();
 
-  if (!startRaw || !isIsoDateOnly(startRaw)) {
-    redirect("/app/cycle?updated=invalid");
+  if (!cycleId || !startRaw || !isIsoDateOnly(startRaw)) {
+    return { error: "That update didn’t go through. Check your dates and try again." };
   }
 
   let end_date: string | null = null;
-  if (endRaw) {
-    if (!isIsoDateOnly(endRaw)) redirect("/app/cycle?updated=invalid");
-    if (endRaw < startRaw) redirect("/app/cycle?updated=invalid");
+  if (endRaw.length > 0) {
     end_date = endRaw;
+  }
+
+  const cycles = await fetchCyclesForUser(supabase, user.id);
+  const exists = cycles.some((c) => c.id === cycleId);
+  if (!exists) {
+    return { error: "That entry couldn’t be found. Refresh and try again." };
+  }
+
+  const today = calendarTodayIso();
+  const v = validateCycleEntry({
+    existing: cycles,
+    draft: { start_date: startRaw, end_date },
+    excludeId: cycleId,
+    today,
+  });
+  if (!v.ok) {
+    return { error: v.error };
   }
 
   const notes = notesRaw ? notesRaw : null;
@@ -114,13 +130,14 @@ export async function updateCycleEntry(cycleId: string, formData: FormData): Pro
     .eq("user_id", user.id);
   if (error) {
     logSupabaseError("cycles.update", error);
-    redirect("/app/cycle?updated=error");
+    return { error: FRIENDLY_TRY_AGAIN };
   }
 
   revalidatePath("/app/cycle");
   redirect("/app/cycle?updated=1");
 }
 
+/** @deprecated use updateCycleEntryAction + hidden cycle_id — kept export name collision guard */
 export async function deleteCycleEntry(cycleId: string): Promise<void> {
   const supabase = await createClient();
   const {

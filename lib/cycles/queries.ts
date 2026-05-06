@@ -32,3 +32,18 @@ export function daysBetweenStarts(newerStart: string, olderStart: string): numbe
   const b = new Date(`${olderStart}T12:00:00`);
   return Math.round((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+/** Mean days between consecutive period starts (cycles sorted newest-first). */
+export function averageDaysBetweenCycleStarts(cycles: CycleRow[]): number | null {
+  if (cycles.length < 2) return null;
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < cycles.length - 1; i++) {
+    const days = daysBetweenStarts(cycles[i].start_date, cycles[i + 1].start_date);
+    if (days > 0) {
+      sum += days;
+      n++;
+    }
+  }
+  return n > 0 ? Math.round(sum / n) : null;
+}

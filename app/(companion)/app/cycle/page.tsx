@@ -2,8 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppPage } from "@/components/product/page-system";
 import { CompanionPanel } from "@/components/product/companion-panel";
-import { daysBetweenStarts, fetchCyclesForUser } from "@/lib/cycles/queries";
-import { formatCycleDate } from "@/lib/cycles/format";
+import { fetchCyclesForUser } from "@/lib/cycles/queries";
 import { createClient } from "@/lib/supabase/server";
 import { ZYRA } from "@/lib/zyra/site";
 import { PRIVACY_ONLY_YOU } from "@/lib/zyra/user-messages";
@@ -30,17 +29,12 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
   const justSaved = params.saved === "1";
   const justUpdated = params.updated === "1";
   const justDeleted = params.deleted === "1";
-  const hasActionError = params.updated === "error" || params.deleted === "error" || params.updated === "invalid";
+  const hasActionError = params.updated === "error" || params.deleted === "error";
 
   const cycles = await fetchCyclesForUser(supabase, user.id);
 
-  let lastCycleDays: number | null = null;
-  if (cycles.length >= 2) {
-    lastCycleDays = daysBetweenStarts(cycles[0].start_date, cycles[1].start_date);
-  }
-
   return (
-    <AppPage>
+    <AppPage className="min-w-0 overflow-x-hidden">
       <CompanionPanel
         eyebrow="Cycle"
         titleLevel={1}
@@ -83,49 +77,44 @@ export default async function CyclePage({ searchParams }: CyclePageProps) {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-border/70 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-8">
-        <h2 className="font-serif text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-          Log your period
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted">
-          One row per period. You can leave the end date open if you are still bleeding or not sure
-          yet.
-        </p>
-        <div className="mt-4 sm:mt-6">
-          <LogPeriodForm />
-        </div>
-      </section>
-
-      {lastCycleDays != null && lastCycleDays > 0 ? (
-        <div className="rounded-2xl border border-border/50 bg-background/85 px-4 py-3 text-center text-sm text-muted">
-          <span className="font-medium text-foreground">Gentle note:</span> your last cycle was
-          about <span className="font-semibold text-accent">{lastCycleDays} days</span> between
-          period starts. Patterns shift — this is not medical advice.
-        </div>
-      ) : null}
-
-      <section className="rounded-2xl border border-border/70 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-8">
-        <h2 className="font-serif text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-          Your history
-        </h2>
-        <p className="mt-2 text-sm text-muted">Newest first. {PRIVACY_ONLY_YOU}</p>
-
-        {cycles.length === 0 ? (
-          <div className="mt-5 rounded-xl border border-dashed border-border/80 bg-background/65 px-4 py-7 text-center sm:mt-8 sm:rounded-2xl sm:px-6 sm:py-10">
-            <p className="font-serif text-base font-medium text-foreground sm:text-lg">
-              Start tracking your cycle
-            </p>
-            <p className="mt-2 text-sm leading-relaxed text-muted">
-              When you&apos;re ready, add a start date above. There&apos;s no streak to protect — just
-              your own pace.
-            </p>
+      <div className="grid min-w-0 gap-5 lg:grid-cols-2 lg:items-start lg:gap-6 xl:gap-8">
+        <section className="min-w-0 rounded-2xl border border-border/70 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-6 lg:p-8">
+          <h2 className="font-serif text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+            Log your period
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Log past periods or your current bleed. Leave the end blank only while a period is still active (one
+            open entry at a time, up to 8 days — then add an end date).
+          </p>
+          <div className="mt-4 sm:mt-6">
+            <LogPeriodForm cycles={cycles} />
           </div>
-        ) : (
-          <CycleHistoryList cycles={cycles} />
-        )}
-      </section>
+        </section>
 
-      <p className="text-center text-xs text-muted">
+        <section className="min-w-0 rounded-2xl border border-border/70 bg-surface/95 p-4 shadow-sm sm:rounded-3xl sm:p-6 lg:p-8 lg:pb-10">
+          <h2 className="font-serif text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+            Your history
+          </h2>
+          <p className="mt-2 rounded-xl border border-border/40 bg-background/60 px-3 py-2.5 text-sm leading-relaxed text-muted">
+            You can add past periods. Zyra keeps the timeline sorted automatically — newest period start first.
+          </p>
+          <p className="mt-2 text-xs text-muted">Newest → oldest · {PRIVACY_ONLY_YOU}</p>
+
+          {cycles.length === 0 ? (
+            <div className="mt-5 rounded-xl border border-dashed border-border/80 bg-background/65 px-4 py-7 text-center sm:mt-6 sm:rounded-2xl sm:px-6 sm:py-10">
+              <p className="font-serif text-base font-medium text-foreground sm:text-lg">Start tracking your cycle</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                When you&apos;re ready, add a start date on the left. There&apos;s no streak to protect — just your own
+                pace.
+              </p>
+            </div>
+          ) : (
+            <CycleHistoryList cycles={cycles} />
+          )}
+        </section>
+      </div>
+
+      <p className="text-center text-xs leading-relaxed text-muted">
         Questions about pain or bleeding belong with a clinician —{" "}
         <Link href="/legal/disclaimer" className="font-semibold text-accent underline-offset-2 hover:underline">
           disclaimer

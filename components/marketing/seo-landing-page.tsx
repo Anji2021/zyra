@@ -121,7 +121,7 @@ export function SeoLandingPage({
             <h2 className="font-serif text-xl font-semibold text-foreground sm:text-2xl">Privacy-first women's health support</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">{privacyMessage}</p>
             <div className="mt-5 flex justify-center">
-              <GoogleSignInButton variant="primary" label="Start tracking privately with Zyra" />
+              <GoogleSignInButton variant="primary" label="Start tracking privately with Zyra" modalInitialMode="signup" />
             </div>
           </div>
         </section>

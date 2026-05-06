@@ -55,7 +55,7 @@ export function MarketingAuthMessages() {
         role="status"
         className="border-b border-border bg-soft-rose/60 px-4 py-3 text-center text-sm text-muted"
       >
-        Sign in with Google to open your private Zyra space.
+        Sign in to open your private Zyra space (Google or email).
       </div>
     );
   }

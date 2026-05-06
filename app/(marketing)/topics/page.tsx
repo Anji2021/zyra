@@ -76,7 +76,7 @@ export default function TopicsIndexPage() {
         <div className="mx-auto mt-10 max-w-lg rounded-2xl border border-border/80 bg-soft-rose/25 p-5 text-center">
           <p className="text-sm font-medium text-foreground">Ready to log in context?</p>
           <div className="mt-4 flex justify-center">
-            <GoogleSignInButton variant="primary" label="Start tracking privately with Zyra" />
+            <GoogleSignInButton variant="primary" label="Start tracking privately with Zyra" modalInitialMode="signup" />
           </div>
         </div>
       </main>

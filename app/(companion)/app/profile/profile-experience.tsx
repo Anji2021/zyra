@@ -37,7 +37,12 @@ export function ProfileExperience({ profile, initialHasSavedHealthProfile }: Pro
         title="Complete your health profile"
         description="This helps Zyra personalize DoctorMatch, cycle insights, and Clarity Plan recommendations."
       >
-        <ProfileForm key={`setup-${profile.updated_at}`} profile={profile} variant="setup" onSaved={handleSaved} />
+        <ProfileForm
+          key="profile-form-setup"
+          profile={profile}
+          variant="setup"
+          onSaved={handleSaved}
+        />
       </CompanionPanel>
     );
   }
@@ -51,7 +56,7 @@ export function ProfileExperience({ profile, initialHasSavedHealthProfile }: Pro
         description="Update your answers anytime — summaries used for personalization stay private to your account."
       >
         <ProfileForm
-          key={`edit-${profile.updated_at}`}
+          key="profile-form-edit"
           profile={profile}
           variant="edit"
           onCancel={() => setEditMode(false)}

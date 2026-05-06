@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { LandingDoctorMatch } from "@/components/marketing/landing-doctor-match";
+import { MarketingHeroPreview } from "@/components/marketing/marketing-hero-preview";
 import { SeoJsonLd } from "@/components/seo/json-ld";
 import { defaultTitle, getSiteOrigin, ZYRA } from "@/lib/zyra/site";
 
@@ -68,6 +69,19 @@ export const metadata: Metadata = {
     follow: true,
   },
 };
+
+const guideLinks = [
+  { href: "/topics", label: "All topics hub" },
+  { href: "/topics/irregular-cycles", label: "Irregular cycles" },
+  { href: "/topics/symptom-journaling", label: "Symptom journaling" },
+  { href: "/symptom-tracker", label: "Symptom tracker" },
+  { href: "/cycle-tracker", label: "Cycle tracker" },
+  { href: "/period-health-insights", label: "Period health insights" },
+  { href: "/hormone-health-tracker", label: "Hormone health tracker" },
+  { href: "/womens-health-ai", label: "Women's health AI" },
+  { href: "/specialists", label: "Specialists & appointment prep" },
+  { href: "/private-health-journal", label: "Private health journal" },
+] as const;
 
 export default function MarketingHomePage() {
   const siteUrl = getSiteOrigin();
@@ -170,116 +184,97 @@ export default function MarketingHomePage() {
       </header>
 
       <main className="flex-1">
-        {/* Above the fold: product + copy */}
-        <section className="border-b border-border/60 bg-gradient-to-b from-soft-rose/35 to-background px-4 py-10 sm:px-6 sm:py-14">
-          <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-2 lg:items-start lg:gap-12">
-            <div className="max-w-xl">
+        {/* Hero */}
+        <section className="border-b border-border/60 bg-gradient-to-b from-soft-rose/35 to-background px-4 py-12 sm:px-6 sm:py-16">
+          <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] lg:items-center lg:gap-12">
+            <div className="max-w-xl lg:max-w-none">
               <h1 className="font-serif text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl lg:text-[2.35rem]">
                 Understand your symptoms. Prepare for better care conversations.
               </h1>
-              <p className="mt-3 text-base leading-relaxed text-muted sm:text-lg">
-                {ZYRA.description}
+              <p className="mt-4 text-base font-medium leading-relaxed text-foreground sm:text-lg">{ZYRA.tagline}</p>
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
+                Track symptoms and cycle patterns privately, organize context with structured logging, then bring clearer
+                questions to clinicians—education only, never a substitute for care.
               </p>
-              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                <GoogleSignInButton variant="primary" label="Sign in with Google" />
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <GoogleSignInButton variant="primary" label="Start free" modalInitialMode="signup" />
                 <Link
-                  href="/onboarding"
-                  className="inline-flex h-12 min-w-[160px] items-center justify-center rounded-full border border-border bg-surface px-6 text-sm font-semibold text-foreground shadow-sm transition hover:border-accent/40 hover:bg-soft-rose/25"
+                  href="#how-zyra-helps"
+                  className="inline-flex h-12 items-center justify-center rounded-full border border-border bg-transparent px-8 text-sm font-semibold text-foreground shadow-sm transition hover:border-accent/40 hover:bg-soft-rose/25"
                 >
-                  Continue onboarding
-                </Link>
-                <Link
-                  href="/app"
-                  className="inline-flex h-12 min-w-[160px] items-center justify-center rounded-full border border-border bg-surface px-6 text-sm font-semibold text-foreground shadow-sm transition hover:border-accent/40 hover:bg-soft-rose/25"
-                >
-                  Open app
+                  Explore how it works
                 </Link>
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-muted sm:text-sm">
-                Signing in verifies your Google account first. Visitors without a session are guided to sign in before
-                onboarding or app tools that require authentication.
+              <p className="mt-6 text-xs leading-relaxed text-muted sm:text-sm">
+                {ZYRA.name} does not diagnose or treat. Prefer email? Pick it in the same sign-up window alongside Google.
               </p>
-              <div className="mt-6 flex flex-wrap gap-2.5 border-t border-border/50 pt-5">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Explore</span>
-                <Link
-                  href="/womens-health-ai"
-                  className="inline-flex items-center rounded-full border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"
-                >
-                  Women&apos;s health AI
-                </Link>
-                <Link
-                  href="/specialists"
-                  className="inline-flex items-center rounded-full border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"
-                >
-                  Specialists &amp; appointments
-                </Link>
-                <Link
-                  href="/topics"
-                  className="inline-flex items-center rounded-full border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"
-                >
-                  Topic guides
-                </Link>
-                <Link
-                  href="#about-zyra"
-                  className="inline-flex items-center rounded-full border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"
-                >
-                  Overview
-                </Link>
-                <Link
-                  href="/privacy"
-                  className="inline-flex items-center rounded-full border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"
-                >
-                  Privacy
-                </Link>
-              </div>
             </div>
-            <div className="lg:pt-1">
-              <LandingDoctorMatch />
+
+            <div className="max-lg:mx-auto max-lg:w-full max-lg:max-w-md lg:justify-self-end">
+              <MarketingHeroPreview />
             </div>
           </div>
         </section>
 
-        {/* Product overview */}
-        <section id="about-zyra" className="px-4 py-8 sm:px-6 sm:py-10" aria-labelledby="about-zyra-heading">
-          <div className="mx-auto grid max-w-6xl gap-4 sm:grid-cols-3 sm:gap-6">
-            <div className="sm:col-span-3">
-              <h2 id="about-zyra-heading" className="font-serif text-2xl font-semibold tracking-tight text-foreground">
-                Product overview
-              </h2>
-              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
-                Zyra is a modern women&apos;s health app that supports cycle tracking, symptom tracking, and private AI
-                health insights. It is designed for day-to-day clarity and care preparation, not medical diagnosis.
-              </p>
-            </div>
-            {[
-              {
-                title: "How Zyra works",
-                body: "Log symptoms, cycle patterns, medicines, and context. Zyra helps organize what happened so trends become easier to discuss.",
-              },
-              {
-                title: "Private AI insights",
-                body: "Receive calm, educational AI health insights from your own logs to support decisions and better questions for care visits.",
-              },
-              {
-                title: "Privacy-first by design",
-                body: "Your account centers a private health companion experience so reproductive wellness notes stay personal and useful over time.",
-              },
-            ].map((item) => (
-              <article
-                key={item.title}
-                className="rounded-xl border border-border/80 bg-surface/90 px-4 py-4 shadow-sm sm:px-5"
-              >
-                <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
-                <p className="mt-2 text-xs leading-relaxed text-muted sm:text-sm">{item.body}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* AI insights */}
+        {/* How Zyra helps */}
         <section
-          id="ai-insights"
-          className="border-y border-border/60 bg-surface/40 px-4 py-10 sm:px-6 sm:py-12"
+          id="how-zyra-helps"
+          className="px-4 py-12 sm:px-6 sm:py-16"
+          aria-labelledby="how-zyra-heading"
+        >
+          <div className="mx-auto max-w-6xl">
+            <div className="max-w-2xl">
+              <h2 id="how-zyra-heading" className="font-serif text-2xl font-semibold tracking-tight text-foreground">
+                How Zyra helps
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted sm:text-base">
+                A calm workflow for reproductive and hormone-health context: log what matters, revisit patterns privately,
+                and pair AI summaries with clinician conversations—not emergency triage inside the same screen.
+              </p>
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              {[
+                {
+                  title: "Structured logging",
+                  body: "Symptoms, cycle timing, meds, and notes stay organized so timelines stay accurate when appointments arrive.",
+                },
+                {
+                  title: "Insights for framing",
+                  body: "Educational AI highlights themes grounded in what you logged—optimized for wording and planning, not self-diagnosis.",
+                },
+                {
+                  title: "Privacy-minded defaults",
+                  body: "Zyra emphasizes account-level confidentiality so personal health journaling remains yours to steward.",
+                },
+              ].map((item) => (
+                <article
+                  key={item.title}
+                  className="rounded-2xl border border-border/80 bg-surface/90 px-5 py-5 shadow-sm"
+                >
+                  <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
+                  <p className="mt-2 text-xs leading-relaxed text-muted sm:text-sm">{item.body}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-12 mx-auto max-w-lg rounded-2xl border border-border/70 bg-soft-rose/15 p-1">
+              <div className="rounded-[1.05rem] border border-border/40 bg-background/90 p-4 sm:p-5">
+                <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  Educational preview · no account required
+                </p>
+                <div className="mt-4">
+                  <LandingDoctorMatch />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* AI-guided insights */}
+        <section
+          id="ai-guided-insights"
+          className="border-y border-border/60 bg-surface/35 px-4 py-12 sm:px-6 sm:py-16"
           aria-labelledby="ai-insights-heading"
         >
           <div className="mx-auto max-w-6xl">
@@ -288,199 +283,129 @@ export default function MarketingHomePage() {
             </h2>
             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
               Artificial intelligence reads only what you log to surface summaries, timelines, and possible themes—all
-              framed as preparation for licensed clinicians—not diagnosis or prescriptions.
+              framed as preparation for licensed clinicians, not diagnoses or prescriptions.
             </p>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               {[
                 {
-                  title: "Summaries anchored in your timeline",
-                  body: "Zyra organizes symptoms, moods, meds, and notes so summaries echo what happened in your journal instead of guessing.",
+                  title: "Anchored summaries",
+                  body: "Themes echo calendar context so AI responses stay tethered to the notes you volunteered.",
                 },
                 {
-                  title: "Prompts for clinician-ready wording",
-                  body: "Use AI outputs to shorten long histories into succinct talking points ahead of urgent or routine appointments.",
+                  title: "Talking-point prompts",
+                  body: "Condense sprawling histories into short prompts you can bring to clinicians or allied staff.",
                 },
                 {
-                  title: "Tone built for reassurance",
-                  body: "Answers stay educational, medically cautious, and transparent about uncertainty so expectations stay grounded.",
+                  title: "Tone with guardrails",
+                  body: "Copy stays reassuring, cites uncertainty plainly, and nudges you back to licensed decision-makers.",
                 },
               ].map((card) => (
                 <article
                   key={card.title}
-                  className="rounded-xl border border-border/80 bg-background/95 px-4 py-5 shadow-sm sm:px-5"
+                  className="rounded-2xl border border-border/80 bg-background/95 px-5 py-5 shadow-sm sm:py-6"
                 >
                   <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
                   <p className="mt-2 text-xs leading-relaxed text-muted sm:text-sm">{card.body}</p>
                 </article>
               ))}
             </div>
-            <div className="mt-8 flex flex-wrap gap-2.5">
+            <p className="mt-8 text-center sm:text-left">
               <Link
                 href="/womens-health-ai"
-                className="inline-flex items-center rounded-full bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground shadow-sm transition hover:opacity-90"
+                className="inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground shadow-sm transition hover:opacity-90"
               >
-                Read the AI companion landing page
+                Learn more about the AI companion
               </Link>
-              <Link
-                href="/symptom-tracker"
-                className="inline-flex items-center rounded-full border border-border/80 bg-surface px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"
-              >
-                Symptom-tracker playbook
-              </Link>
-              <Link
-                href="/cycle-tracker"
-                className="inline-flex items-center rounded-full border border-border/80 bg-surface px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"
-              >
-                Cycle-tracking playbook
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        <section className="px-4 pb-4 sm:px-6 sm:pb-6" aria-labelledby="guides-heading">
-          <div className="mx-auto max-w-6xl rounded-2xl border border-border/70 bg-surface/80 p-4 shadow-sm sm:p-5">
-            <h2 id="guides-heading" className="font-serif text-lg font-semibold tracking-tight text-foreground">
-              Explore women's health tracking guides
-            </h2>
-            <p className="mt-1 text-xs leading-relaxed text-muted sm:text-sm">
-              Learn how Zyra supports symptom tracking, cycle insights, hormone health tracking, and private health
-              journaling.
             </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {[
-                { href: "/topics", label: "All topics hub" },
-                { href: "/topics/irregular-cycles", label: "Irregular cycles topic" },
-                { href: "/topics/symptom-journaling", label: "Symptom journaling topic" },
-                { href: "/symptom-tracker", label: "Symptom tracker" },
-                { href: "/cycle-tracker", label: "Cycle tracker" },
-                { href: "/period-health-insights", label: "Period health insights" },
-                { href: "/hormone-health-tracker", label: "Hormone health tracker" },
-                { href: "/womens-health-ai", label: "Women's health AI" },
-                { href: "/specialists", label: "Specialists & appointment prep" },
-                { href: "/private-health-journal", label: "Private health journal" },
-              ].map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-xl border border-border/80 bg-background/90 px-3 py-2 text-sm font-medium text-foreground transition hover:border-accent/40 hover:text-accent"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
           </div>
         </section>
 
         {/* Privacy-first */}
-        <section className="px-4 py-8 sm:px-6 sm:py-10" aria-labelledby="privacy-first-heading">
-          <div className="mx-auto max-w-6xl rounded-2xl border border-border/70 bg-gradient-to-br from-soft-rose/25 via-background to-background px-5 py-7 text-center shadow-sm sm:px-8 sm:text-left">
-            <h2 id="privacy-first-heading" className="font-serif text-xl font-semibold text-foreground sm:text-2xl">
-              Privacy-first by design
+        <section
+          id="privacy-first-tracking"
+          className="px-4 py-12 sm:px-6 sm:py-14"
+          aria-labelledby="privacy-first-heading"
+        >
+          <div className="mx-auto max-w-3xl rounded-2xl border border-border/70 bg-surface/85 px-6 py-10 text-center sm:px-10 sm:text-left">
+            <h2 id="privacy-first-heading" className="font-serif text-2xl font-semibold text-foreground">
+              Privacy-first tracking
             </h2>
-            <p className="mx-auto mt-3 max-w-3xl text-sm leading-relaxed text-muted sm:mx-0">
-              Logs stay tied to your account with practical controls for understanding how data fuels AI summaries. We
-              encourage reading the privacy policy before you enroll so expectations stay aligned.
+            <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
+              Your logs stay anchored to your account with transparent expectations about AI usage. Reading the privacy
+              policy takes minutes and keeps surprises out of onboarding.
             </p>
             <Link
               href="/privacy"
-              className="mt-5 inline-flex items-center justify-center rounded-full border border-accent/40 px-5 py-2 text-sm font-semibold text-accent underline-offset-2 transition hover:bg-soft-rose/30 sm:inline-flex"
+              className="mt-6 inline-flex text-sm font-semibold text-accent underline-offset-4 transition hover:underline"
             >
-              View privacy policy
+              Read the privacy policy
             </Link>
           </div>
         </section>
 
-        {/* Static demo — trust */}
-        <section
-          className="border-y border-border/60 bg-surface/50 px-4 py-8 sm:px-6 sm:py-10"
-          aria-labelledby="tracking-care-heading"
-        >
+        {/* Explore guides */}
+        <section id="explore-guides" className="border-t border-border/60 px-4 py-12 sm:px-6 sm:py-16" aria-labelledby="guides-heading">
           <div className="mx-auto max-w-6xl">
-            <h2 id="tracking-care-heading" className="font-serif text-2xl font-semibold tracking-tight text-foreground">
-              Symptom and cycle tracking for better care conversations
+            <h2 id="guides-heading" className="font-serif text-2xl font-semibold tracking-tight text-foreground">
+              Explore guides
             </h2>
-            <p className="mt-1 max-w-2xl text-xs text-muted">
-              Illustrative only. Zyra helps track health context and supports care preparation with licensed
-              clinicians.
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
+              Deeper dives on symptom tracking, cycle insights, journaling, hormones, appointments, and the AI companion.
             </p>
-            <div className="mt-5 grid gap-4 lg:grid-cols-3">
-              <div className="rounded-xl border border-border/70 bg-background/90 p-4 lg:col-span-1">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-accent">Pattern summary</h3>
-                <p className="mt-2 text-sm text-foreground">
-                  Possible theme: irregular cycle + fatigue trend from recent entries
-                </p>
-              </div>
-              <div className="rounded-xl border border-border/70 bg-background/90 p-4 lg:col-span-1">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-accent">Specialist direction</h3>
-                <p className="mt-2 text-sm font-medium text-foreground">Endocrinologist or OB-GYN</p>
-                <p className="mt-2 text-xs text-muted">A starting point to discuss with your doctor.</p>
-              </div>
-              <div className="rounded-xl border border-border/70 bg-background/90 p-4 lg:col-span-1">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-accent">Nearby care (example)</h3>
-                <p className="mt-2 font-serif text-base font-semibold text-foreground">Bay Area Women’s Health Clinic</p>
-                <p className="mt-1 text-xs text-muted">4.6 · 210 reviews · Open now</p>
-                <p className="mt-2 text-xs text-muted">123 Example St, San Francisco, CA</p>
-                <span className="mt-3 inline-block rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted">
-                  View on Google Maps
-                </span>
-              </div>
-            </div>
+            <ul className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {guideLinks.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="flex h-full min-h-[3.25rem] items-center rounded-2xl border border-border/80 bg-surface/90 px-4 py-3 text-sm font-medium text-foreground transition hover:border-accent/35 hover:bg-soft-rose/20"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 
-        {/* Clarity Plan */}
-        <section id="clarity-plan" className="px-4 py-10 sm:px-6 sm:py-12">
-          <div className="mx-auto max-w-2xl rounded-2xl border border-border/80 bg-surface/90 px-5 py-8 text-center shadow-sm sm:px-8">
-            <h2 className="font-serif text-xl font-semibold text-foreground sm:text-2xl">Clarity Plan</h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted">
-              Save DoctorMatch runs, review AI health insights from your history, and keep specialist search in one
-              workspace for ongoing reproductive wellness tracking.
-            </p>
-            <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
-              <GoogleSignInButton variant="primary" label="Start free with Google" />
-              <Link
-                href="/onboarding"
-                className="inline-flex h-12 min-w-[180px] items-center justify-center rounded-full border border-border bg-background px-6 text-sm font-semibold text-foreground transition hover:border-accent/40"
-              >
-                Resume onboarding
-              </Link>
-              <Link
-                href="/app"
-                className="inline-flex h-12 min-w-[180px] items-center justify-center rounded-full border border-border bg-background px-6 text-sm font-semibold text-foreground transition hover:border-accent/40"
-              >
-                Go to dashboard
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Disclaimer — compact */}
-        <section className="border-t border-border/60 bg-soft-rose/30 px-4 py-8 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm leading-relaxed text-muted">
-              {ZYRA.name} does not diagnose or treat. Urgent symptoms need emergency care or a licensed clinician.{" "}
-              <Link href="/legal/disclaimer" className="font-semibold text-accent underline-offset-2 hover:underline">
-                Full disclaimer
-              </Link>
-            </p>
-          </div>
-        </section>
-
-        {/* Minimal FAQ (matches schema) */}
-        <section className="px-4 py-8 sm:px-6" aria-labelledby="faq-heading">
-          <div className="mx-auto max-w-2xl space-y-3">
-            <h2 id="faq-heading" className="font-serif text-xl font-semibold tracking-tight text-foreground">
+        {/* FAQ */}
+        <section className="border-t border-border/55 bg-soft-rose/25 px-4 py-12 sm:px-6 sm:py-16" aria-labelledby="faq-heading">
+          <div className="mx-auto max-w-2xl space-y-4">
+            <h2 id="faq-heading" className="font-serif text-2xl font-semibold tracking-tight text-foreground">
               FAQ
             </h2>
             {faqItems.map((item) => (
               <details
                 key={item.question}
-                className="rounded-xl border border-border/70 bg-surface/80 px-4 py-3 text-left"
+                className="group rounded-2xl border border-border/70 bg-background/92 px-4 py-3 text-left shadow-sm open:shadow-md"
               >
-                <summary className="cursor-pointer text-sm font-semibold text-foreground">{item.question}</summary>
-                <p className="mt-2 text-xs leading-relaxed text-muted">{item.answer}</p>
+                <summary className="cursor-pointer text-sm font-semibold text-foreground outline-none [&::-webkit-details-marker]:hidden">
+                  {item.question}
+                </summary>
+                <p className="mt-3 text-xs leading-relaxed text-muted sm:text-sm">{item.answer}</p>
               </details>
             ))}
+          </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="border-t border-border/60 px-4 py-12 sm:px-6 sm:py-16" aria-labelledby="final-cta-heading">
+          <div className="mx-auto max-w-2xl rounded-3xl border border-border/75 bg-gradient-to-b from-soft-rose/35 to-background px-6 py-10 text-center sm:px-10">
+            <h2 id="final-cta-heading" className="font-serif text-xl font-semibold text-foreground sm:text-2xl">
+              Ready to keep your logs private?
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              Start free with Google or email, finish onboarding once, then access {ZYRA.name} anytime from the dashboard.
+            </p>
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
+              <GoogleSignInButton variant="primary" label="Start free" modalInitialMode="signup" />
+              <GoogleSignInButton variant="outline" label="Already have access? Sign in" modalInitialMode="signin" />
+            </div>
+            <p className="mt-6 text-xs leading-relaxed text-muted">
+              {ZYRA.name} does not diagnose or treat. Seek emergency care when symptoms are urgent.{` `}
+              <Link href="/legal/disclaimer" className="font-semibold text-accent underline-offset-2 hover:underline">
+                Medical disclaimer
+              </Link>
+            </p>
           </div>
         </section>
       </main>
@@ -496,7 +421,9 @@ export default function MarketingHomePage() {
             Terms
           </Link>
         </p>
-        <p className="mt-2 text-muted/80">© {new Date().getFullYear()} {ZYRA.name}</p>
+        <p className="mt-2 text-muted/80">
+          © {new Date().getFullYear()} {ZYRA.name}
+        </p>
       </footer>
     </div>
   );

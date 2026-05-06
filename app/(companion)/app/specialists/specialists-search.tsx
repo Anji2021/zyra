@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MapPin, Star } from "lucide-react";
+import { MapPin, Star, X } from "lucide-react";
+import { SavedSpecialistButton } from "@/components/specialists/saved-specialist-button";
 import { FilterChipsRow } from "@/components/product/page-system";
 import {
   normalizeDoctorMatchResponse,
@@ -25,6 +26,8 @@ type PlacesResult = {
   lng: number | null;
   distanceMiles: number | null;
   mapsUrl: string;
+  phone: string | null;
+  website: string | null;
   apiOrder: number;
 };
 
@@ -86,7 +89,18 @@ function ResultCardSkeleton() {
   );
 }
 
-export function SpecialistsSearch() {
+type SpecialistsSearchProps = {
+  savedPlaceIds?: string[];
+};
+
+const SORT_LABELS: Record<SortKey, string> = {
+  relevance: "Relevance",
+  rating: "Highest rated",
+  reviews: "Most reviewed",
+  distance: "Closest",
+};
+
+export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps) {
   const [location, setLocation] = useState("");
   const [specialistType, setSpecialistType] = useState<SpecialistTypeValue>("gynecologist");
   const [symptoms, setSymptoms] = useState<string[]>([]);
@@ -105,6 +119,17 @@ export function SpecialistsSearch() {
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("relevance");
+
+  const savedPlaceIdSet = useMemo(
+    () => new Set(savedPlaceIds.map((id) => id.trim()).filter(Boolean)),
+    [savedPlaceIds],
+  );
+
+  function clearFilters() {
+    setRatingFilter("all");
+    setDistanceFilter("all");
+    setSortKey("relevance");
+  }
 
   const hasAnyDistance = useMemo(
     () => placesRaw.some((p) => p.distanceMiles != null && p.distanceMiles > 0),
@@ -154,6 +179,8 @@ export function SpecialistsSearch() {
       lng: r.lng ?? null,
       distanceMiles: r.distanceMiles ?? null,
       mapsUrl: r.mapsUrl,
+      phone: r.phone ?? null,
+      website: r.website ?? null,
     }));
   }
 
@@ -567,25 +594,6 @@ export function SpecialistsSearch() {
                     |
                   </span>
                   <span className="shrink-0 self-center text-[10px] font-semibold uppercase tracking-wide text-muted">
-                    🩺
-                  </span>
-                  <select
-                    aria-label="Specialist type filter"
-                    value={specialistType}
-                    onChange={(e) => setSpecialistType(e.target.value as SpecialistTypeValue)}
-                    disabled={generateLoading || placesLoading}
-                    className="min-h-9 shrink-0 rounded-full border border-border/70 bg-background px-2.5 text-xs font-semibold text-foreground"
-                  >
-                    {SPECIALIST_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mx-1 shrink-0 self-center text-border/60" aria-hidden>
-                    |
-                  </span>
-                  <span className="shrink-0 self-center text-[10px] font-semibold uppercase tracking-wide text-muted">
                     🔤
                   </span>
                   {(
@@ -607,6 +615,61 @@ export function SpecialistsSearch() {
                     </button>
                   ))}
                 </FilterChipsRow>
+
+                {ratingFilter !== "all" || distanceFilter !== "all" || sortKey !== "relevance" ? (
+                  <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Active</span>
+                      {ratingFilter !== "all" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-soft-rose/35 px-2.5 py-1 text-[11px] font-semibold text-foreground">
+                          Rating {ratingFilter === "4" ? "4.0+" : "4.5+"}
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 text-muted transition hover:text-foreground"
+                            aria-label="Remove rating filter"
+                            onClick={() => setRatingFilter("all")}
+                          >
+                            <X className="size-3.5" strokeWidth={2.25} />
+                          </button>
+                        </span>
+                      ) : null}
+                      {distanceFilter !== "all" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-soft-rose/35 px-2.5 py-1 text-[11px] font-semibold text-foreground">
+                          ≤{distanceFilter} mi
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 text-muted transition hover:text-foreground"
+                            aria-label="Remove distance filter"
+                            onClick={() => setDistanceFilter("all")}
+                          >
+                            <X className="size-3.5" strokeWidth={2.25} />
+                          </button>
+                        </span>
+                      ) : null}
+                      {sortKey !== "relevance" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-soft-rose/35 px-2.5 py-1 text-[11px] font-semibold text-foreground">
+                          Sort: {SORT_LABELS[sortKey]}
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 text-muted transition hover:text-foreground"
+                            aria-label="Reset sort to relevance"
+                            onClick={() => setSortKey("relevance")}
+                          >
+                            <X className="size-3.5" strokeWidth={2.25} />
+                          </button>
+                        </span>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="shrink-0 self-start rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-semibold text-muted transition hover:border-accent/35 hover:text-foreground sm:self-center"
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                ) : null}
+
                 {!hasAnyDistance ? (
                   <p className="mt-1 text-[10px] text-muted">Distance filters and “Closest” sort use your location when coordinates are available.</p>
                 ) : null}
@@ -633,46 +696,70 @@ export function SpecialistsSearch() {
                   <p className="mt-3 text-sm text-muted">No doctors match these filters. Loosen filters or load more.</p>
                 ) : (
                   <ul className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 md:items-stretch md:gap-4">
-                    {filteredSorted.map((place) => (
-                      <li
-                        key={place.placeId || `${place.name}-${place.address}-${place.apiOrder}`}
-                        className="flex h-full min-h-0 flex-col rounded-xl border border-border/55 bg-background/95 p-3 sm:p-4"
-                      >
-                        <p className="text-[15px] font-semibold leading-snug text-foreground">{place.name}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                          {place.rating != null && !Number.isNaN(place.rating) ? (
-                            <>
-                              <StarsRow rating={place.rating} />
-                              <span className="text-xs font-semibold tabular-nums text-foreground">
-                                {place.rating.toFixed(1)}
-                              </span>
-                              {place.reviewCount != null && place.reviewCount > 0 ? (
-                                <span className="text-[11px] text-muted">
-                                  ({place.reviewCount.toLocaleString()} reviews)
-                                </span>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className="text-[11px] text-muted">No rating yet</span>
-                          )}
-                        </div>
-                        <p className="mt-2 flex min-h-0 flex-1 gap-1.5 text-xs leading-snug text-muted">
-                          <MapPin className="mt-0.5 size-3.5 shrink-0 text-accent/70" aria-hidden />
-                          <span className="min-w-0 break-words">{place.address}</span>
-                        </p>
-                        {place.distanceMiles != null && place.distanceMiles > 0 ? (
-                          <p className="mt-1.5 text-[11px] text-muted">~{place.distanceMiles.toFixed(1)} mi</p>
-                        ) : null}
-                        <a
-                          href={place.mapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-3 flex min-h-10 w-full items-center justify-center rounded-full border border-accent/40 bg-background px-3 text-xs font-semibold text-accent transition hover:bg-soft-rose/40 sm:mt-auto"
+                    {filteredSorted.map((place) => {
+                      const pid = place.placeId?.trim() ?? "";
+                      return (
+                        <li
+                          key={place.placeId || `${place.name}-${place.address}-${place.apiOrder}`}
+                          className="flex h-full min-h-0 flex-col rounded-xl border border-border/55 bg-background/95 p-3 sm:p-4"
                         >
-                          Open in Maps
-                        </a>
-                      </li>
-                    ))}
+                          <p className="text-[15px] font-semibold leading-snug text-foreground">{place.name}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            {place.rating != null && !Number.isNaN(place.rating) ? (
+                              <>
+                                <StarsRow rating={place.rating} />
+                                <span className="text-xs font-semibold tabular-nums text-foreground">
+                                  {place.rating.toFixed(1)}
+                                </span>
+                                {place.reviewCount != null && place.reviewCount > 0 ? (
+                                  <span className="text-[11px] text-muted">
+                                    ({place.reviewCount.toLocaleString()} reviews)
+                                  </span>
+                                ) : null}
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-muted">No rating yet</span>
+                            )}
+                          </div>
+                          <p className="mt-2 flex min-h-0 flex-1 gap-1.5 text-xs leading-snug text-muted">
+                            <MapPin className="mt-0.5 size-3.5 shrink-0 text-accent/70" aria-hidden />
+                            <span className="min-w-0 break-words">{place.address}</span>
+                          </p>
+                          {place.distanceMiles != null && place.distanceMiles > 0 ? (
+                            <p className="mt-1.5 text-[11px] text-muted">~{place.distanceMiles.toFixed(1)} mi</p>
+                          ) : null}
+                          <div className="mt-3 flex min-w-0 flex-col gap-2 sm:mt-auto">
+                            <a
+                              href={place.mapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex min-h-10 w-full items-center justify-center rounded-full border border-accent/40 bg-background px-3 text-xs font-semibold text-accent transition hover:bg-soft-rose/40"
+                            >
+                              Open in Maps
+                            </a>
+                            {pid ? (
+                              <SavedSpecialistButton
+                                placeId={pid}
+                                initiallySaved={savedPlaceIdSet.has(pid)}
+                                payload={{
+                                  name: place.name,
+                                  address: place.address,
+                                  rating: place.rating,
+                                  reviewCount: place.reviewCount,
+                                  mapsUrl: place.mapsUrl,
+                                  phone: place.phone,
+                                  website: place.website,
+                                  specialistType,
+                                  searchLocation: location.trim(),
+                                }}
+                              />
+                            ) : (
+                              <p className="text-center text-[10px] text-muted">Save unavailable (missing place id).</p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
 

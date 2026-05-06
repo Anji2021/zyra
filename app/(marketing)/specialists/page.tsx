@@ -57,7 +57,7 @@ export default function SpecialistsMarketingPage() {
             and sign-in. Always verify licensing and suitability with licensed professionals you trust.
           </p>
           <div className="mt-8 flex flex-wrap gap-2.5">
-            <GoogleSignInButton variant="primary" label="Continue to specialist search after sign-in" />
+            <GoogleSignInButton variant="primary" label="Continue to specialist search after sign-in" modalInitialMode="signup" />
             <Link
               href="/topics"
               className="inline-flex items-center rounded-full border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent/40 hover:text-accent"
