@@ -10,6 +10,8 @@ const GROQ_MODEL = "llama-3.1-8b-instant";
 const MAX_USER_CHARS = 4000;
 /** Recent turns sent to Groq (system prompt is separate). */
 const CONTEXT_MESSAGE_LIMIT = 10;
+/** Cap client-provided history length to limit request size. */
+const MAX_HISTORY_ITEMS = 40;
 
 export const runtime = "nodejs";
 
@@ -26,6 +28,23 @@ function isMessageRow(r: { id: string; role: string; content: string } | null): 
     typeof r.content === "string" &&
     typeof r.id === "string"
   );
+}
+
+function sanitizeConversationHistory(raw: unknown): ChatCompletionMessageParam[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChatCompletionMessageParam[] = [];
+  for (const item of raw.slice(-MAX_HISTORY_ITEMS)) {
+    if (item === null || typeof item !== "object") continue;
+    const role = (item as { role?: unknown }).role;
+    const content = (item as { content?: unknown }).content;
+    if (role !== "user" && role !== "assistant") continue;
+    if (typeof content !== "string") continue;
+    const trimmed = content.trim();
+    if (!trimmed) continue;
+    if (trimmed.length > MAX_USER_CHARS) continue;
+    out.push({ role: role as "user" | "assistant", content: trimmed });
+  }
+  return out;
 }
 
 async function loadContextFromSupabase(
@@ -106,7 +125,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const userMessageText = String((body as { message: unknown }).message ?? "").trim();
+    const bodyObj = body as {
+      message: unknown;
+      conversationHistory?: unknown;
+    };
+
+    const userMessageText = String(bodyObj.message ?? "").trim();
 
     if (!userMessageText) {
       return Response.json({ error: "Message cannot be empty." }, { status: 400 });
@@ -115,21 +139,39 @@ export async function POST(request: Request) {
       return Response.json({ error: "Message is too long." }, { status: 400 });
     }
 
-    const { data: insertedUser, error: insertUserError } = await supabase
-      .from("messages")
-      .insert({ user_id: user.id, role: "user", content: userMessageText })
-      .select("id, role, content")
-      .single();
+    /** Multi-thread UI: client sends prior messages; no DB insert (avoids mixing threads in `messages`). */
+    const useClientThread =
+      "conversationHistory" in bodyObj && Array.isArray(bodyObj.conversationHistory);
 
-    if (insertUserError || !isMessageRow(insertedUser)) {
-      console.error("[api/assistant] save user message", insertUserError?.message);
-      return Response.json(
-        { error: "Could not save your message. Please try again." },
-        { status: 500 },
-      );
+    let messages: ChatCompletionMessageParam[];
+    /** Set only for legacy DB-backed single thread. */
+    let legacyUserRow: MessageRow | null = null;
+
+    if (useClientThread) {
+      const prior = sanitizeConversationHistory(bodyObj.conversationHistory);
+      const withUser: ChatCompletionMessageParam[] = [
+        ...prior,
+        { role: "user" as const, content: userMessageText },
+      ];
+      messages = withUser.slice(-CONTEXT_MESSAGE_LIMIT);
+    } else {
+      const { data: insertedUser, error: insertUserError } = await supabase
+        .from("messages")
+        .insert({ user_id: user.id, role: "user", content: userMessageText })
+        .select("id, role, content")
+        .single();
+
+      if (insertUserError || !isMessageRow(insertedUser)) {
+        console.error("[api/assistant] save user message", insertUserError?.message);
+        return Response.json(
+          { error: "Could not save your message. Please try again." },
+          { status: 500 },
+        );
+      }
+
+      legacyUserRow = insertedUser;
+      messages = await loadContextFromSupabase(supabase, user.id);
     }
-
-    const messages: ChatCompletionMessageParam[] = await loadContextFromSupabase(supabase, user.id);
 
     const groq = new Groq({
       apiKey: process.env.GROQ_API_KEY,
@@ -177,6 +219,20 @@ export async function POST(request: Request) {
         ? rawContent.trim()
         : "Sorry, I couldn't respond.";
 
+    if (useClientThread) {
+      const uid = crypto.randomUUID();
+      const aid = crypto.randomUUID();
+      const userMessage = { id: uid, role: "user" as const, content: userMessageText };
+      const assistantMessage = { id: aid, role: "assistant" as const, content: reply };
+      return Response.json({
+        message: reply,
+        reply,
+        userMessage,
+        assistantMessage,
+        threadMode: true,
+      });
+    }
+
     const { data: insertedAssistant, error: insertAssistantError } = await supabase
       .from("messages")
       .insert({ user_id: user.id, role: "assistant", content: reply })
@@ -191,7 +247,7 @@ export async function POST(request: Request) {
     return Response.json({
       message: reply,
       reply,
-      userMessage: insertedUser,
+      userMessage: legacyUserRow ?? { id: crypto.randomUUID(), role: "user" as const, content: userMessageText },
       assistantMessage: insertedAssistant,
     });
   } catch (error) {

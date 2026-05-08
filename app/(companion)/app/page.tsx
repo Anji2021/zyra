@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarHeart, ClipboardList, MapPinned } from "lucide-react";
 import { AppPage, PageHeader, ProductCard, ResponsiveGrid } from "@/components/product/page-system";
+import { HomeGreetingHeading } from "@/components/product/home-greeting-heading";
 import { fetchCyclesForUser } from "@/lib/cycles/queries";
 import { formatCycleDate } from "@/lib/cycles/format";
 import { getProfileForUser, hasUserHealthProfileRow } from "@/lib/profiles/queries";
@@ -86,7 +87,7 @@ export default async function HomePage() {
     <AppPage>
       <PageHeader
         eyebrow="Home"
-        title={`Good morning, ${firstName}`}
+        title={<HomeGreetingHeading firstName={firstName} />}
         subtitle="What would you like to do today?"
         actions={primaryCta}
       />

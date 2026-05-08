@@ -1,13 +1,24 @@
 import { StatusBar } from "expo-status-bar";
+import * as SplashScreen from "expo-splash-screen";
 import * as AuthSession from "expo-auth-session";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { createNavigationContainerRef, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Video, ResizeMode } from "expo-av";
-import { Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -27,22 +38,38 @@ import {
   type CycleRow,
   type DoctorMatchRecommendation,
   type HealthProfile,
+  type HealthTimelineEvent,
   type MedicineRow,
   type NearbySpecialist,
+  type ReminderRowInput,
+  type RuleBasedTimelineSummaries,
   type SaveHealthProfileInput,
   type SymptomRow,
+  type WhatChangedEmptyReason,
+  type WhatChangedResult,
+  type TimelineFilter,
+  type TimelinePageTopCards,
+  buildHealthTimelineEvents,
+  buildWhatChangedInsights,
+  buildRuleBasedTimelineSummaries,
+  buildRuleBasedTimelineTopCards,
+  filterTimelineEvents,
   generateDoctorMatch,
   getHealthProfile,
+  groupEventsByDate,
   inferSpecialistTypeFromDoctorMatch,
   saveHealthProfile,
   searchNearbySpecialists,
+  formatGreetingWithName,
+  firstNameFromDisplayName,
 } from "@zyra/shared";
-import { supabase } from "./lib/supabase";
+import { MOBILE_SUPABASE_CONFIGURED, supabase } from "./lib/supabase";
 
 type TabParamList = {
   Home: undefined;
   Cycle: undefined;
   Health: undefined;
+  Timeline: undefined;
   DoctorMatch: undefined;
   Profile: undefined;
 };
@@ -277,13 +304,95 @@ function cardWrap(children: React.ReactNode) {
   return <View style={styles.card}>{children}</View>;
 }
 
+function whatChangedEmptyMessage(reason: WhatChangedEmptyReason | null): string {
+  if (reason === "insufficient_data") {
+    return "Log more data to see what changed over time.";
+  }
+  if (reason === "no_shift_detected") {
+    return "No big shifts detected comparing this week to last — keep logging; small comparisons get clearer with more history.";
+  }
+  return "Log more data to see what changed over time.";
+}
+
+/** Same rule engine as web — compact presentation for React Native */
+function WhatChangedMobileBlock({
+  result,
+  loading,
+  error,
+  title = "What changed?",
+  maxCards = 3,
+}: {
+  result: WhatChangedResult | null;
+  loading: boolean;
+  error: string | null;
+  title?: string;
+  maxCards?: number;
+}) {
+  return (
+    <View style={styles.card}>
+      <Text style={styles.kicker}>{title.toUpperCase()}</Text>
+      <Text style={[styles.cardSub, { marginBottom: 8, fontSize: 11 }]}>Educational only — not medical advice.</Text>
+      {loading ? (
+        <View style={styles.whatChangedLoadingRow}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={[styles.resultBody, { marginLeft: 10 }]}>Loading comparisons…</Text>
+        </View>
+      ) : error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : result?.fetchError ? (
+        <Text style={styles.resultBody}>{result.fetchError}</Text>
+      ) : !result ? (
+        <Text style={styles.resultBody}>{whatChangedEmptyMessage("insufficient_data")}</Text>
+      ) : result.cards.length === 0 ? (
+        <Text style={styles.resultBody}>{whatChangedEmptyMessage(result.emptyReason)}</Text>
+      ) : (
+        <>
+          <Text style={[styles.cardSub, { fontSize: 12, marginBottom: 10 }]}>{result.comparisonLabel}</Text>
+          {result.cards.slice(0, Math.max(1, maxCards)).map((c, i) => (
+            <View key={c.id} style={i === 0 ? styles.whatChangedItemCardFirst : styles.whatChangedItemCard}>
+              <Text style={styles.whatChangedCardTitle}>{c.title}</Text>
+              <Text style={styles.whatChangedChange}>{c.changeDetected}</Text>
+              <Text style={styles.whatChangedWhy}>{c.whyItMatters}</Text>
+              <Text style={styles.whatChangedNext}>
+                <Text style={styles.whatChangedNextBold}>Suggested · </Text>
+                {c.suggestedNext}
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  );
+}
+
 function HomeScreen() {
+  const [greetingLine, setGreetingLine] = useState(() => `Hello, there`);
+
+  useEffect(() => {
+    let mounted = true;
+    async function refreshGreeting() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!mounted) return;
+      const name = firstNameFromDisplayName(
+        typeof user?.user_metadata?.full_name === "string" ? user.user_metadata.full_name : null,
+        user?.email ?? null,
+      );
+      setGreetingLine(formatGreetingWithName(name));
+    }
+    void refreshGreeting();
+    const id = setInterval(() => void refreshGreeting(), 60_000);
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, []);
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.scrollPad}>
         <View style={styles.heroCard}>
           <Text style={styles.kicker}>ZYRA</Text>
-          <Text style={styles.title}>Good morning</Text>
+          <Text style={styles.title}>{greetingLine}</Text>
           <Text style={styles.subtitle}>What would you like to do today?</Text>
 
           <TouchableOpacity style={styles.primaryButton} activeOpacity={0.85}>
@@ -294,6 +403,7 @@ function HomeScreen() {
             <Text style={styles.secondaryButtonText}>Find specialist</Text>
           </TouchableOpacity>
         </View>
+
       </ScrollView>
       <StatusBar style="dark" />
     </SafeAreaView>
@@ -544,6 +654,275 @@ function HealthScreen() {
             ))}
           </>,
         )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const TIMELINE_FILTERS: { key: TimelineFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "cycle", label: "Cycle" },
+  { key: "symptoms", label: "Symptoms" },
+  { key: "medicine", label: "Medicine" },
+  { key: "notes", label: "Notes" },
+  { key: "reminders", label: "Reminders" },
+];
+
+function maxProfileUpdatedAt(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): string | null {
+  if (!a && !b) return null;
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return Date.parse(a) >= Date.parse(b) ? a : b;
+}
+
+function timelineKindLabel(kind: HealthTimelineEvent["kind"]): string {
+  switch (kind) {
+    case "cycle":
+      return "Cycle";
+    case "symptom":
+      return "Symptom";
+    case "medicine":
+      return "Medicine";
+    case "reminder":
+      return "Reminder";
+    case "profile":
+      return "Profile";
+    default:
+      return "Entry";
+  }
+}
+
+function formatTimelineGroupDate(ymd: string): string {
+  try {
+    const d = new Date(`${ymd}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return ymd;
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(d);
+  } catch {
+    return ymd;
+  }
+}
+
+function HealthTimelineScreen() {
+  const [filter, setFilter] = useState<TimelineFilter>("all");
+  const [loading, setLoading] = useState(true);
+  const [initialEvents, setInitialEvents] = useState<HealthTimelineEvent[]>([]);
+  const [summaries, setSummaries] = useState<RuleBasedTimelineSummaries | null>(null);
+  const [topCards, setTopCards] = useState<TimelinePageTopCards | null>(null);
+  const [whatChangedResult, setWhatChangedResult] = useState<WhatChangedResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadTimeline() {
+    setLoading(true);
+    setError(null);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setInitialEvents([]);
+        setSummaries(null);
+        setTopCards(null);
+        setWhatChangedResult(null);
+        return;
+      }
+
+      const [cyclesRes, symRes, medRes, remRes, profRes, healthRes] = await Promise.all([
+        supabase
+          .from("cycles")
+          .select("id,user_id,start_date,end_date,notes,created_at")
+          .eq("user_id", user.id)
+          .order("start_date", { ascending: false })
+          .limit(80),
+        supabase
+          .from("symptoms")
+          .select("id,user_id,symptom,severity,logged_date,notes,created_at")
+          .eq("user_id", user.id)
+          .order("logged_date", { ascending: false })
+          .limit(150),
+        supabase
+          .from("medicines")
+          .select("id,user_id,name,dosage,frequency,start_date,end_date,notes,created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(80),
+        supabase
+          .from("reminders")
+          .select("id,type,title,message,reminder_date,reminder_time,is_active,created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(120),
+        supabase.from("profiles").select("updated_at").eq("id", user.id).maybeSingle(),
+        supabase.from("user_health_profile").select("updated_at").eq("user_id", user.id).maybeSingle(),
+      ]);
+
+      const firstErr =
+        cyclesRes.error?.message ||
+        symRes.error?.message ||
+        medRes.error?.message ||
+        remRes.error?.message ||
+        profRes.error?.message ||
+        healthRes.error?.message;
+      if (firstErr) setError(firstErr);
+
+      const cycles = (cyclesRes.data ?? []) as CycleRow[];
+      const symptoms = (symRes.data ?? []) as SymptomRow[];
+      const medicines = (medRes.data ?? []) as MedicineRow[];
+      const reminders = (remRes.data ?? []) as ReminderRowInput[];
+      const pAt = (profRes.data as { updated_at?: string } | null)?.updated_at;
+      const hAt = (healthRes.data as { updated_at?: string } | null)?.updated_at;
+      const profileUpdatedAt = maxProfileUpdatedAt(pAt ?? null, hAt ?? null);
+
+      const events = buildHealthTimelineEvents({
+        cycles,
+        symptoms,
+        medicines,
+        reminders,
+        profileUpdatedAt,
+      });
+      setInitialEvents(events);
+      const now = new Date();
+      setWhatChangedResult(
+        buildWhatChangedInsights({
+          cycles,
+          symptoms,
+          medicines,
+          nowInput: now,
+        }),
+      );
+      setSummaries(buildRuleBasedTimelineSummaries(events, now));
+      setTopCards(buildRuleBasedTimelineTopCards(events, cycles, now));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load timeline.");
+      setWhatChangedResult(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadTimeline();
+  }, []);
+
+  const filtered = useMemo(() => filterTimelineEvents(initialEvents, filter), [initialEvents, filter]);
+  const grouped = useMemo(() => {
+    const g = groupEventsByDate(filtered);
+    return [...g.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  }, [filtered]);
+
+  const hasAnyEvents = initialEvents.length > 0;
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.scrollPad}>
+        {cardWrap(
+          <>
+            <Text style={styles.kicker}>TIMELINE</Text>
+            <Text style={styles.cardTitle}>AI Health Timeline</Text>
+            <Text style={styles.cardSub}>
+              Your cycle, symptoms, medicines, notes, and reminders organized over time. Educational only — not medical
+              advice.
+            </Text>
+          </>,
+        )}
+
+        {!error || loading ? (
+          <WhatChangedMobileBlock result={whatChangedResult} loading={loading} error={null} maxCards={1} />
+        ) : null}
+
+        {topCards ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 12 }}
+            contentContainerStyle={styles.timelineTopStrip}
+          >
+            <View style={styles.timelineTopCard}>
+              <Text style={styles.timelineTopCardKicker}>{topCards.recentActivity.title}</Text>
+              <Text style={styles.timelineTopCardBody}>{topCards.recentActivity.body}</Text>
+            </View>
+            <View style={styles.timelineTopCard}>
+              <Text style={styles.timelineTopCardKicker}>{topCards.mostLoggedSymptom.title}</Text>
+              <Text style={styles.timelineTopCardBody}>{topCards.mostLoggedSymptom.body}</Text>
+            </View>
+            <View style={styles.timelineTopCard}>
+              <Text style={styles.timelineTopCardKicker}>{topCards.currentCycleContext.title}</Text>
+              <Text style={styles.timelineTopCardBody}>{topCards.currentCycleContext.body}</Text>
+            </View>
+          </ScrollView>
+        ) : null}
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: 12 }}
+          contentContainerStyle={styles.timelineFilterRow}
+        >
+          {TIMELINE_FILTERS.map(({ key, label }) => (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setFilter(key)}
+              style={[styles.timelineChip, filter === key ? styles.timelineChipActive : null]}
+            >
+              <Text style={[styles.timelineChipText, filter === key ? styles.timelineChipTextActive : null]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {loading ? (
+          <Text style={styles.cardSub}>Loading timeline…</Text>
+        ) : error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : filtered.length === 0 ? (
+          cardWrap(
+            <Text style={styles.resultBody}>
+              {!hasAnyEvents
+                ? "Your health timeline will appear as you log cycles, symptoms, medicines, notes, and reminders."
+                : "No entries match this filter — try All or another view."}
+            </Text>,
+          )
+        ) : (
+          grouped.map(([dateKey, dayEvents]) => (
+            <View key={dateKey} style={{ marginBottom: 16 }}>
+              <Text style={styles.timelineDateHeading}>{formatTimelineGroupDate(dateKey)}</Text>
+              {dayEvents.map((ev) => (
+                <View key={ev.id} style={[styles.card, { marginTop: 8 }]}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <Text style={styles.timelineEventTitle}>{ev.title}</Text>
+                    <Text style={styles.timelineKindBadge}>{timelineKindLabel(ev.kind)}</Text>
+                  </View>
+                  {ev.detail ? <Text style={[styles.resultBody, { marginTop: 6 }]}>{ev.detail}</Text> : null}
+                </View>
+              ))}
+            </View>
+          ))
+        )}
+
+        {summaries && !loading ? (
+          <View style={{ marginTop: 8 }}>
+            <Text style={[styles.resultTitle, { marginBottom: 8 }]}>AI pattern notes</Text>
+            {cardWrap(
+              <>
+                <Text style={styles.timelinePatternHeading}>What changed recently</Text>
+                <Text style={styles.resultBody}>{summaries.whatChanged.body}</Text>
+                <Text style={[styles.timelinePatternHeading, { marginTop: 12 }]}>Possible recurring symptoms</Text>
+                <Text style={styles.resultBody}>{summaries.recurringSymptoms.body}</Text>
+                <Text style={[styles.timelinePatternHeading, { marginTop: 12 }]}>Things to track</Text>
+                <Text style={styles.resultBody}>{summaries.thisWeek.body}</Text>
+                <Text style={[styles.cardSub, { marginTop: 10, fontSize: 11 }]}>
+                  Rule-based signals — pattern noticed, worth tracking, may be helpful to discuss. Not a diagnosis.
+                </Text>
+              </>,
+            )}
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1394,7 +1773,15 @@ export default function App() {
   }
 
   useEffect(() => {
+    console.log("APP START");
+    if (__DEV__) {
+      console.log("EXPO_PUBLIC_SUPABASE_URL:", Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL?.trim()));
+      console.log("EXPO_PUBLIC_SUPABASE_ANON_KEY:", Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim()));
+      console.log("EXPO_PUBLIC_API_BASE_URL:", Boolean(process.env.EXPO_PUBLIC_API_BASE_URL?.trim()));
+    }
     let mounted = true;
+
+    const SESSION_BOOTSTRAP_MS = 12_000;
 
     async function handleAuthRedirectUrl(url: string | null) {
       console.log("callback URL received:", Boolean(url));
@@ -1455,15 +1842,49 @@ export default function App() {
       }
     }
 
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (!mounted) return;
-      if (error) {
-        console.log("[mobile auth] session error:", error.message);
-        setAuthError(error.message);
+    async function bootstrapAuth() {
+      if (!MOBILE_SUPABASE_CONFIGURED) {
+        if (!mounted) return;
+        setAuthError(
+          "Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in mobile/.env, then restart Expo.",
+        );
+        setSession(null);
+        console.log("SESSION READY");
+        setAuthLoading(false);
+        return;
       }
-      setSession(data.session ?? null);
-      setAuthLoading(false);
-    });
+      try {
+        const result = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), SESSION_BOOTSTRAP_MS)),
+        ]);
+        if (!mounted) return;
+        if (result === null) {
+          console.warn("[mobile] getSession timed out; continuing without session");
+          setAuthError((prev) => prev ?? "Could not restore your session yet. You can still sign in.");
+          setSession(null);
+        } else {
+          const { data, error } = result;
+          if (error) {
+            console.log("[mobile auth] session error:", error.message);
+            setAuthError(error.message);
+          }
+          setSession(data.session ?? null);
+        }
+      } catch (e) {
+        if (!mounted) return;
+        console.warn("[mobile] getSession threw", e);
+        setSession(null);
+        setAuthError("Could not restore your session.");
+      } finally {
+        if (mounted) {
+          console.log("SESSION READY");
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    void bootstrapAuth();
 
     Linking.getInitialURL().then((url: string | null) => {
       if (!mounted) return;
@@ -1486,6 +1907,31 @@ export default function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  /** Failsafe: never leave the splash / “Loading Zyra…” gate stuck forever */
+  useEffect(() => {
+    const AUTH_WATCHDOG_MS = 18_000;
+    const watchdog = setTimeout(() => {
+      setAuthLoading((prev) => {
+        if (!prev) return prev;
+        console.warn("[mobile] auth watchdog: forcing bootstrap complete");
+        console.log("SESSION READY");
+        return false;
+      });
+    }, AUTH_WATCHDOG_MS);
+    return () => clearTimeout(watchdog);
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    void SplashScreen.hideAsync().catch(() => {});
+  }, [authLoading]);
+
+  /** React Navigation mounts only when authenticated; log when auth UI becomes interactive */
+  useEffect(() => {
+    if (authLoading || session) return;
+    console.log("ROUTER READY");
+  }, [authLoading, session]);
 
   useEffect(() => {
     if (authLoading || !session) return;
@@ -1774,7 +2220,11 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer ref={rootNavigationRef} theme={navTheme}>
+    <NavigationContainer
+      ref={rootNavigationRef}
+      theme={navTheme}
+      onReady={() => console.log("ROUTER READY")}
+    >
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerStyle: { backgroundColor: "#FFFDF9" },
@@ -1797,9 +2247,11 @@ export default function App() {
                   ? (focused ? "calendar" : "calendar-outline")
                   : route.name === "Health"
                     ? (focused ? "heart" : "heart-outline")
-                    : route.name === "DoctorMatch"
-                      ? (focused ? "medkit" : "medkit-outline")
-                      : (focused ? "person" : "person-outline");
+                    : route.name === "Timeline"
+                      ? (focused ? "time" : "time-outline")
+                      : route.name === "DoctorMatch"
+                        ? (focused ? "medkit" : "medkit-outline")
+                        : (focused ? "person" : "person-outline");
             return <Ionicons name={iconName} size={size} color={color} />;
           },
         })}
@@ -1807,6 +2259,7 @@ export default function App() {
         <Tab.Screen name="Home" component={HomeScreen} />
         <Tab.Screen name="Cycle" component={CycleScreen} />
         <Tab.Screen name="Health" component={HealthScreen} />
+        <Tab.Screen name="Timeline" component={HealthTimelineScreen} />
         <Tab.Screen name="DoctorMatch">
           {() => <DoctorMatchScreen getApiOptions={getProtectedApiOptions} />}
         </Tab.Screen>
@@ -2158,6 +2611,138 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 9,
     borderRadius: 8,
     backgroundColor: "rgba(0,0,0,0.08)",
+  },
+  timelineFilterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingRight: 16,
+  },
+  timelineTopStrip: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingVertical: 4,
+    paddingRight: 16,
+  },
+  timelineTopCard: {
+    width: 280,
+    maxWidth: "88%",
+    marginRight: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+  },
+  timelineTopCardKicker: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: colors.accentDark,
+  },
+  timelineTopCardBody: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.text,
+  },
+  timelinePatternHeading: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    color: colors.accentDark,
+  },
+  timelineChip: {
+    marginRight: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+  },
+  timelineChipActive: {
+    borderColor: colors.accent,
+    backgroundColor: colors.cardSoft,
+  },
+  timelineChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  timelineChipTextActive: {
+    color: colors.text,
+  },
+  timelineDateHeading: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: colors.muted,
+  },
+  timelineEventTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+    paddingRight: 8,
+  },
+  timelineKindBadge: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    color: colors.accentDark,
+  },
+  whatChangedLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  whatChangedItemCardFirst: {
+    marginTop: 0,
+    paddingTop: 0,
+  },
+  whatChangedItemCard: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  whatChangedChange: {
+    marginTop: 4,
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.text,
+    lineHeight: 20,
+  },
+  whatChangedCardTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    color: colors.muted,
+  },
+  whatChangedWhy: {
+    marginTop: 6,
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
+  },
+  whatChangedNext: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 17,
+  },
+  whatChangedNextBold: {
+    fontWeight: "700",
+    color: colors.text,
   },
   authSwitch: {
     marginTop: 10,

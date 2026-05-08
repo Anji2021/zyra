@@ -4,3 +4,6 @@ export * from "./constants/zyra";
 export * from "./doctor-match/types";
 export * from "./supabase/public-env";
 export * from "./types";
+export * from "./utils/getGreeting";
+export * from "./health-timeline";
+export * from "./patterns";

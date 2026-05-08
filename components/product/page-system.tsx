@@ -7,7 +7,7 @@ export function AppPage({ children, className = "" }: { children: ReactNode; cla
 
 type PageHeaderProps = {
   eyebrow?: string;
-  title: string;
+  title: ReactNode;
   titleAs?: "h1" | "h2";
   subtitle?: ReactNode;
   /** Primary actions — full width on small screens, inline on `sm+`. */

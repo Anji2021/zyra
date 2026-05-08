@@ -4,6 +4,7 @@ import {
   Bookmark,
   BookOpen,
   CalendarHeart,
+  CalendarClock,
   ClipboardList,
   Home,
   MapPinned,
@@ -56,6 +57,12 @@ export const productSidebarNav: NavItem[] = [
     label: "Insights",
     description: "Gentle summaries when you have enough logged to notice patterns.",
     icon: Sparkles,
+  },
+  {
+    href: "/app/timeline",
+    label: "Timeline",
+    description: "Your cycle, symptoms, medicines, notes, and reminders in one place over time.",
+    icon: CalendarClock,
   },
   {
     href: "/app/reminders",

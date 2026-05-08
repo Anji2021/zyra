@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BellRing, Bookmark, BookOpen, MapPinned, Sparkles } from "lucide-react";
+import { BellRing, Bookmark, BookOpen, CalendarClock, MapPinned, Sparkles } from "lucide-react";
 import { AppPage, PageHeader } from "@/components/product/page-system";
 import { ZYRA } from "@/lib/zyra/site";
 
@@ -35,6 +35,12 @@ const links = [
     label: "Insights",
     description: "A soft place for patterns when your logs grow over time.",
     icon: Sparkles,
+  },
+  {
+    href: "/app/timeline",
+    label: "Health Timeline",
+    description: "Cycles, symptoms, medicines, notes, and reminders — organized by date.",
+    icon: CalendarClock,
   },
 ] as const;
 

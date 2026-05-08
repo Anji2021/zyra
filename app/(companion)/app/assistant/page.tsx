@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
-import { AppPage, PageHeader } from "@/components/product/page-system";
-import { AssistantChat } from "./assistant-chat";
+import { AppPage } from "@/components/product/page-system";
+import { AssistantWorkspace } from "./assistant-workspace";
 import type { AssistantChatMessage } from "@/lib/assistant/chat-types";
 import { fetchSymptomsForUser } from "@/lib/symptoms/queries";
 import { createClient } from "@/lib/supabase/server";
-import { GLOBAL_MEDICAL_DISCLAIMER } from "@/lib/zyra/medical-disclaimer";
 import { ZYRA } from "@/lib/zyra/site";
 import { PRIVACY_ONLY_YOU } from "@/lib/zyra/user-messages";
 
@@ -42,7 +41,7 @@ export default async function AssistantPage({ searchParams }: AssistantPageProps
   const prefill = (searchParams ? (await searchParams).q : undefined) ?? "";
   const initialInput = prefill.trim().slice(0, 500);
 
-  const initialMessages: AssistantChatMessage[] = (rows ?? [])
+  const legacySeedMessages: AssistantChatMessage[] = (rows ?? [])
     .filter(
       (r): r is AssistantChatMessage =>
         typeof r.id === "string" &&
@@ -52,31 +51,26 @@ export default async function AssistantPage({ searchParams }: AssistantPageProps
     .reverse();
 
   return (
-    <AppPage className="gap-4 pb-1 sm:gap-6 sm:pb-2">
-      <PageHeader
-        eyebrow="Assistant"
-        title="A quiet place to ask"
-        subtitle={
-          <>
-            {ZYRA.name} answers in plain language for{" "}
-            <strong className="font-medium text-foreground">education only</strong> — never a stand-in for your doctor
-            or your prescriptions.
-            <span className="mt-2 block text-xs text-muted">{PRIVACY_ONLY_YOU}</span>
-          </>
-        }
+    <AppPage className="gap-4 pb-2 sm:gap-5 sm:pb-3">
+      <header className="mx-auto w-full max-w-6xl border-b border-border/45 pb-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">Assistant</p>
+        <h1 className="mt-1 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          Your workspace with {ZYRA.name}
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted">
+          Organize chats, reuse prompts, and get plain-language explanations —{" "}
+          <strong className="font-medium text-foreground">education only</strong>, never a substitute for in-person
+          care.
+        </p>
+        <p className="mt-2 text-xs text-muted">{PRIVACY_ONLY_YOU}</p>
+      </header>
+
+      <AssistantWorkspace
+        userId={user.id}
+        hasLoggedSymptoms={hasLoggedSymptoms}
+        initialInput={initialInput}
+        legacySeedMessages={legacySeedMessages}
       />
-
-      <p className="rounded-2xl border border-border/60 bg-soft-rose/20 px-3 py-2 text-center text-[11px] leading-relaxed text-muted sm:px-4 sm:py-2.5 sm:text-xs">
-        {GLOBAL_MEDICAL_DISCLAIMER}
-      </p>
-
-      <div className="min-h-0 min-w-0 flex-1">
-        <AssistantChat
-          initialMessages={initialMessages}
-          hasLoggedSymptoms={hasLoggedSymptoms}
-          initialInput={initialInput}
-        />
-      </div>
     </AppPage>
   );
 }
