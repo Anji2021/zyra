@@ -57,7 +57,7 @@ export function ProductShell({
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="relative hidden h-screen w-52 shrink-0 flex-col border-r border-border/80 bg-surface/95 py-6 pl-4 pr-2 lg:sticky lg:top-0 lg:flex xl:w-56">
+        <aside className="relative hidden h-full min-h-0 w-52 shrink-0 flex-col border-r border-border/80 bg-surface/95 py-6 pl-4 pr-2 lg:sticky lg:top-0 lg:flex xl:w-56">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
             Navigate
           </p>
@@ -89,7 +89,10 @@ export function ProductShell({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <main className="relative flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-6 sm:py-8 max-lg:pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10">
+          <main
+            id="app-main-scroll"
+            className="relative flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-6 sm:py-8 max-lg:pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10"
+          >
             <AppPageShell>{children}</AppPageShell>
           </main>
         </div>

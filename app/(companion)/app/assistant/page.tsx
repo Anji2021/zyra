@@ -52,17 +52,17 @@ export default async function AssistantPage({ searchParams }: AssistantPageProps
 
   return (
     <AppPage className="gap-4 pb-2 sm:gap-5 sm:pb-3">
-      <header className="mx-auto w-full max-w-6xl border-b border-border/45 pb-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">Assistant</p>
-        <h1 className="mt-1 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+      <header className="mx-auto w-full max-w-6xl border-b border-stone-200 pb-4 dark:border-stone-700">
+        <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">Assistant</p>
+        <h1 className="mt-1 font-serif text-3xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
           Your workspace with {ZYRA.name}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-stone-600 dark:text-stone-400">
           Organize chats, reuse prompts, and get plain-language explanations —{" "}
-          <strong className="font-medium text-foreground">education only</strong>, never a substitute for in-person
-          care.
+          <strong className="font-medium text-stone-900 dark:text-stone-100">education only</strong>, never a
+          substitute for in-person care.
         </p>
-        <p className="mt-2 text-xs text-muted">{PRIVACY_ONLY_YOU}</p>
+        <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">{PRIVACY_ONLY_YOU}</p>
       </header>
 
       <AssistantWorkspace

@@ -9,7 +9,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantChatMessage } from "@/lib/assistant/chat-types";
 import {
   loadConversations,
@@ -102,6 +102,7 @@ export function AssistantWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"chat" | "history" | "prompts">("chat");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesScrollRootRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const legacyRef = useRef(legacySeedMessages);
 
@@ -138,8 +139,17 @@ export function AssistantWorkspace({
   const messages = active?.messages ?? [];
 
   const scrollToBottom = useCallback(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const root = messagesScrollRootRef.current;
+    if (!root) return;
+    root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
   }, []);
+
+  /** Keep the shell main scroller at the top so the page heading is not clipped after navigation or hydration. */
+  useLayoutEffect(() => {
+    if (!hydrated) return;
+    const main = document.getElementById("app-main-scroll");
+    if (main) main.scrollTop = 0;
+  }, [hydrated]);
 
   useEffect(() => {
     scrollToBottom();
@@ -336,7 +346,7 @@ export function AssistantWorkspace({
 
   if (!hydrated) {
     return (
-      <div className="flex min-h-[min(70vh,40rem)] items-center justify-center rounded-2xl border border-border/60 bg-surface/80 p-8 text-sm text-muted">
+      <div className="flex min-h-[min(70vh,40rem)] items-center justify-center rounded-2xl border border-stone-200 bg-white p-8 text-sm text-stone-700 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300">
         Loading assistant…
       </div>
     );
@@ -345,7 +355,7 @@ export function AssistantWorkspace({
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 lg:gap-4">
       {/* Mobile / tablet tab bar — desktop uses 3-column grid */}
-      <div className="flex shrink-0 gap-1 rounded-2xl border border-border/60 bg-surface/90 p-1 lg:hidden">
+      <div className="flex shrink-0 gap-1 rounded-2xl border border-stone-200 bg-white p-1 shadow-sm lg:hidden dark:border-stone-700 dark:bg-stone-900">
         {(
           [
             ["chat", "Chat", MessageCircle],
@@ -359,11 +369,11 @@ export function AssistantWorkspace({
             onClick={() => setMobileTab(key)}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition ${
               mobileTab === key
-                ? "bg-soft-rose/80 text-foreground shadow-sm"
-                : "text-muted hover:bg-background/80"
+                ? "bg-stone-100 text-stone-900 shadow-sm ring-1 ring-stone-200 dark:bg-stone-800 dark:text-stone-100 dark:ring-stone-600"
+                : "text-stone-600 hover:bg-stone-50 dark:text-stone-400 dark:hover:bg-stone-800/80"
             }`}
           >
-            <Icon className="size-3.5 shrink-0" aria-hidden />
+            <Icon className="size-3.5 shrink-0 opacity-90" aria-hidden />
             {label}
           </button>
         ))}
@@ -372,19 +382,19 @@ export function AssistantWorkspace({
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:gap-5 xl:grid-cols-[260px_minmax(0,1fr)_280px]">
         {/* LEFT — History (desktop always; mobile when tab) */}
         <aside
-          className={`min-h-0 min-w-0 flex-col rounded-2xl border border-border/55 bg-surface/95 p-3 shadow-sm lg:flex ${
+          className={`min-h-0 min-w-0 flex-col rounded-2xl border border-stone-200 bg-white p-3 shadow-sm lg:flex dark:border-stone-700 dark:bg-stone-900 ${
             mobileTab === "history" ? "flex max-h-[70vh] lg:max-h-none" : "hidden"
           }`}
         >
           <button
             type="button"
             onClick={newChat}
-            className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/35 bg-soft-rose/40 py-2.5 text-sm font-semibold text-foreground transition hover:bg-soft-rose/55"
+            className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 py-2.5 text-sm font-semibold text-stone-800 transition hover:border-stone-400 hover:bg-stone-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700"
           >
-            <Plus className="size-4" aria-hidden />
+            <Plus className="size-4 text-stone-700 dark:text-stone-300" aria-hidden />
             New chat
           </button>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Recent</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">Recent</p>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-0.5">
             {( ["today", "week", "older"] as const ).map((key) => {
               const label =
@@ -393,17 +403,17 @@ export function AssistantWorkspace({
               if (items.length === 0) return null;
               return (
                 <div key={key}>
-                  <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted/90">
+                  <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
                     {label}
                   </p>
                   <ul className="space-y-1">
                     {items.map((c) => (
                       <li key={c.id}>
                         <div
-                          className={`group flex items-start gap-1 rounded-xl border px-2 py-2 text-left transition ${
+                          className={`group flex items-start gap-1 rounded-xl border px-2 py-2 text-left shadow-sm transition ${
                             c.id === activeId
-                              ? "border-accent/40 bg-soft-rose/45"
-                              : "border-transparent bg-background/70 hover:border-border/60"
+                              ? "border-stone-300 bg-stone-100 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-800 dark:hover:bg-stone-800/90"
+                              : "border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:hover:border-stone-600 dark:hover:bg-stone-800/80"
                           }`}
                         >
                           <button
@@ -414,17 +424,17 @@ export function AssistantWorkspace({
                             }}
                             className="min-w-0 flex-1 text-left"
                           >
-                            <span className="line-clamp-2 text-xs font-medium leading-snug text-foreground">
+                            <span className="line-clamp-2 text-xs font-semibold leading-snug text-stone-900 dark:text-stone-100">
                               {c.title}
                             </span>
-                            <span className="mt-0.5 block text-[10px] text-muted">
+                            <span className="mt-0.5 block text-xs text-stone-500 dark:text-stone-400">
                               {formatListTime(c.updatedAt)}
                             </span>
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteConversation(c.id)}
-                            className="shrink-0 rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-red-500/10 hover:text-red-700 group-hover:opacity-100"
+                            className="shrink-0 rounded-lg p-1.5 text-stone-500 opacity-0 transition hover:bg-red-500/10 hover:text-red-700 group-hover:opacity-100 dark:text-stone-400"
                             aria-label="Delete conversation"
                           >
                             <Trash2 className="size-3.5" />
@@ -443,37 +453,44 @@ export function AssistantWorkspace({
         <section
           className={`min-h-0 min-w-0 flex-col ${mobileTab === "chat" ? "flex" : "hidden lg:flex"}`}
         >
-          <div className="flex h-[min(72vh,720px)] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-border/60 bg-surface/95 shadow-md lg:h-[min(75vh,760px)]">
-            <header className="shrink-0 border-b border-border/50 bg-background/50 px-4 py-3 sm:px-5">
+          <div className="flex h-[min(72vh,720px)] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm lg:h-[min(75vh,760px)] dark:border-stone-700 dark:bg-stone-900">
+            <header className="shrink-0 border-b border-stone-200 bg-white px-4 py-3 sm:px-5 dark:border-stone-700 dark:bg-stone-900">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h2 className="font-serif text-lg font-semibold leading-tight text-foreground sm:text-xl line-clamp-2">
+                  <h2 className="line-clamp-2 font-serif text-xl font-semibold leading-tight text-stone-900 sm:text-2xl dark:text-stone-100">
                     {active?.title ?? "Chat"}
                   </h2>
-                  <p className="mt-1 text-[11px] text-muted">{INPUT_DISCLAIMER}</p>
+                  <p className="mt-2.5 text-xs font-medium leading-snug text-stone-600 dark:text-stone-400">
+                    {INPUT_DISCLAIMER}
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={clearActiveChat}
                   disabled={loading || messages.length === 0}
-                  className="shrink-0 rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-soft-rose/30 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="shrink-0 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700"
                 >
                   Clear chat
                 </button>
               </div>
             </header>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5">
+            <div
+              ref={messagesScrollRootRef}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5"
+            >
               {messages.length === 0 ? (
                 <div className="mx-auto flex max-w-md flex-col items-center px-2 text-center">
-                  <MessageSquarePlus className="size-10 text-accent/80" aria-hidden />
-                  <p className="mt-4 font-serif text-lg font-semibold text-foreground">
+                  <MessageSquarePlus className="size-10 text-stone-700 dark:text-stone-300" aria-hidden />
+                  <p className="mt-4 font-serif text-lg font-semibold text-stone-900 dark:text-stone-100">
                     Ask {ZYRA.name} anything about your cycle, symptoms, or health logs.
                   </p>
-                  <p className="mt-2 text-sm leading-relaxed text-muted">
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-stone-600 dark:text-stone-400">
                     Plain-language education — never a substitute for your clinician.
                   </p>
-                  <p className="mt-6 text-xs font-medium text-muted lg:hidden">Quick starts</p>
+                  <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-stone-500 lg:hidden dark:text-stone-400">
+                    Quick starts
+                  </p>
                   <div className="mt-2 flex flex-wrap justify-center gap-2 lg:hidden">
                     {promptChoices.slice(0, 4).map((p) => (
                       <button
@@ -481,7 +498,7 @@ export function AssistantWorkspace({
                         type="button"
                         disabled={loading}
                         onClick={() => sendPromptDirect(p)}
-                        className="rounded-full border border-border/70 bg-soft-rose/25 px-3 py-1.5 text-left text-[11px] font-medium text-foreground transition hover:bg-soft-rose/45 disabled:opacity-50"
+                        className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-left text-xs font-semibold text-stone-800 shadow-sm transition hover:border-stone-400 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700"
                       >
                         {p}
                       </button>
@@ -499,13 +516,13 @@ export function AssistantWorkspace({
                         className={`max-w-[min(92%,28rem)] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm sm:px-4 sm:py-3 ${
                           msg.role === "user"
                             ? "bg-accent text-accent-foreground"
-                            : "border border-border/60 bg-background/95 text-foreground"
+                            : "border border-stone-200 bg-white text-stone-900 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
                         }`}
                       >
                         <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                         <p
-                          className={`mt-1.5 text-[10px] ${
-                            msg.role === "user" ? "text-accent-foreground/75" : "text-muted"
+                          className={`mt-1.5 text-xs ${
+                            msg.role === "user" ? "text-accent-foreground/80" : "text-stone-500 dark:text-stone-400"
                           }`}
                         >
                           {formatBubbleTime(msg.createdAt)}
@@ -515,7 +532,7 @@ export function AssistantWorkspace({
                   ))}
                   {loading ? (
                     <li className="flex justify-start">
-                      <div className="rounded-2xl border border-border/50 bg-background/90 px-4 py-2.5 text-sm italic text-muted">
+                      <div className="rounded-2xl border border-stone-200 bg-white px-4 py-2.5 text-sm italic text-stone-600 shadow-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-400">
                         {ZYRA.name} is typing…
                       </div>
                     </li>
@@ -531,8 +548,10 @@ export function AssistantWorkspace({
               </div>
             ) : null}
 
-            <div className="shrink-0 border-t border-border/55 bg-background/90 px-3 py-3 sm:px-5 sm:py-4">
-              <p className="mb-2 text-center text-[10px] text-muted sm:text-left">{INPUT_DISCLAIMER}</p>
+            <div className="shrink-0 border-t border-stone-200 bg-white px-3 py-3 sm:px-5 sm:py-4 dark:border-stone-700 dark:bg-stone-900">
+              <p className="mb-2 text-center text-xs font-medium leading-snug text-stone-600 sm:text-left dark:text-stone-400">
+                {INPUT_DISCLAIMER}
+              </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
                 <label className="sr-only" htmlFor="assistant-workspace-input">
                   Message
@@ -551,7 +570,7 @@ export function AssistantWorkspace({
                   rows={2}
                   placeholder={`Message ${ZYRA.name}…`}
                   disabled={loading}
-                  className="min-h-[2.75rem] flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none ring-accent/25 focus:ring-2 disabled:opacity-60 sm:min-h-[3rem] sm:rounded-2xl sm:py-3"
+                  className="min-h-[2.75rem] flex-1 resize-none rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none ring-stone-300/40 focus:ring-2 disabled:opacity-60 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 sm:min-h-[3rem] sm:rounded-2xl sm:py-3"
                 />
                 <button
                   type="button"
@@ -562,7 +581,7 @@ export function AssistantWorkspace({
                   Send
                 </button>
               </div>
-              <p className="mt-2 text-center text-[10px] text-muted">
+              <p className="mt-2 text-center text-xs text-stone-500 dark:text-stone-400">
                 Enter to send · Shift+Enter for a new line
               </p>
             </div>
@@ -575,19 +594,19 @@ export function AssistantWorkspace({
             mobileTab === "prompts" ? "flex" : "hidden"
           }`}
         >
-          <div className="rounded-2xl border border-border/55 bg-surface/95 p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-foreground">
-              <Sparkles className="size-4 text-accent" aria-hidden />
-              <h3 className="text-sm font-semibold">Quick starts</h3>
+          <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-4 shrink-0 text-stone-700 dark:text-stone-300" aria-hidden />
+              <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-100">Quick starts</h3>
             </div>
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-4 space-y-2">
               {promptChoices.map((p) => (
                 <li key={p}>
                   <button
                     type="button"
                     disabled={loading}
                     onClick={() => applyPrompt(p)}
-                    className="w-full rounded-xl border border-border/60 bg-background/90 px-3 py-2.5 text-left text-xs font-medium leading-snug text-foreground transition hover:border-accent/30 hover:bg-soft-rose/25 disabled:opacity-50"
+                    className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-left text-xs font-semibold leading-snug text-stone-800 shadow-sm transition hover:border-stone-400 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:hover:border-stone-500 dark:hover:bg-stone-700/80"
                   >
                     {p}
                   </button>
@@ -596,16 +615,16 @@ export function AssistantWorkspace({
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-amber-200/40 bg-amber-50/50 p-4 dark:bg-amber-950/20">
-            <p className="text-xs font-semibold text-foreground">Safety</p>
-            <p className="mt-2 text-[11px] leading-relaxed text-muted">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-5 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/35">
+            <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">Safety</p>
+            <p className="mt-2 text-xs font-medium leading-relaxed text-stone-700 dark:text-stone-300">
               {ZYRA.name} can explain patterns and help you prepare questions, but cannot diagnose or prescribe.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-border/50 bg-background/90 p-4">
-            <p className="text-xs font-semibold text-foreground">Context</p>
-            <p className="mt-2 text-[11px] leading-relaxed text-muted">
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 p-5 shadow-sm dark:border-stone-700 dark:bg-stone-800/80">
+            <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">Context</p>
+            <p className="mt-2 text-xs font-medium leading-relaxed text-stone-700 dark:text-stone-300">
               When available, your saved profile and logs may inform responses — still educational only, not a medical
               record for your clinic unless you choose to share.
             </p>
