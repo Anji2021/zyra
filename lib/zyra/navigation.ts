@@ -3,6 +3,7 @@ import {
   BellRing,
   Bookmark,
   BookOpen,
+  Bot,
   CalendarHeart,
   CalendarClock,
   ClipboardList,
@@ -117,6 +118,30 @@ export const productMobileNav: NavItem[] = [
     icon: Menu,
   },
 ];
+
+/**
+ * Hackathon-mode streamlined nav — only the destinations needed for the demo
+ * experience. Activated when `NEXT_PUBLIC_HACKATHON_MODE=true`; the existing
+ * `productSidebarNav` / `productMobileNav` arrays above are untouched and used
+ * everywhere else. Profile is intentionally omitted here — it's still
+ * reachable via the avatar dropdown in the top bar.
+ */
+export const productHackathonSidebarNav: NavItem[] = [
+  {
+    href: "/app",
+    label: "Home",
+    description: "Streamlined hackathon home.",
+    icon: Home,
+  },
+  {
+    href: "/app/agent",
+    label: "Zyra Agent",
+    description: "Unified AI care coordination — research through care plan.",
+    icon: Bot,
+  },
+];
+
+export const productHackathonMobileNav: NavItem[] = productHackathonSidebarNav;
 
 /** @deprecated Use productSidebarNav or productMobileNav */
 export const productNav = productSidebarNav;

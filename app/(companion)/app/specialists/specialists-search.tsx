@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, Star, X } from "lucide-react";
 import { SavedSpecialistButton } from "@/components/specialists/saved-specialist-button";
 import { FilterChipsRow } from "@/components/product/page-system";
@@ -91,6 +91,12 @@ function ResultCardSkeleton() {
 
 type SpecialistsSearchProps = {
   savedPlaceIds?: string[];
+  /** When `agent`, copy is tuned for Zyra Agent + optional auto-run from intake. */
+  embedVariant?: "page" | "agent";
+  agentInitialLocation?: string;
+  agentInitialSymptomsText?: string;
+  /** After seeding location/symptoms from agent intake, run one search automatically. */
+  agentAutoRun?: boolean;
 };
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -100,7 +106,14 @@ const SORT_LABELS: Record<SortKey, string> = {
   distance: "Closest",
 };
 
-export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps) {
+export function SpecialistsSearch({
+  savedPlaceIds = [],
+  embedVariant = "page",
+  agentInitialLocation = "",
+  agentInitialSymptomsText = "",
+  agentAutoRun = false,
+}: SpecialistsSearchProps) {
+  const isAgent = embedVariant === "agent";
   const [location, setLocation] = useState("");
   const [specialistType, setSpecialistType] = useState<SpecialistTypeValue>("gynecologist");
   const [symptoms, setSymptoms] = useState<string[]>([]);
@@ -124,6 +137,8 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
     () => new Set(savedPlaceIds.map((id) => id.trim()).filter(Boolean)),
     [savedPlaceIds],
   );
+
+  const agentBootstrapRef = useRef(false);
 
   function clearFilters() {
     setRatingFilter("all");
@@ -184,9 +199,12 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
     }));
   }
 
-  async function generateMatchAndNearby() {
-    const combinedSymptoms = symptoms.join(", ").trim();
-    const loc = location.trim();
+  async function generateMatchAndNearby(opts?: {
+    location?: string;
+    symptomsCombined?: string;
+  }) {
+    const combinedSymptoms = (opts?.symptomsCombined ?? symptoms.join(", ")).trim();
+    const loc = (opts?.location ?? location).trim();
     if (generateLoading || placesLoading || placesLoadingMore) return;
 
     setSymptomError(combinedSymptoms ? null : "Please add at least one symptom");
@@ -344,6 +362,27 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
     setSymptoms((prev) => prev.filter((item) => item !== symptom));
   }
 
+  useEffect(() => {
+    if (!isAgent || !agentAutoRun || agentBootstrapRef.current) return;
+    const loc = agentInitialLocation.trim();
+    const sym = agentInitialSymptomsText.trim();
+    if (!loc || !sym) return;
+    agentBootstrapRef.current = true;
+    let innerTimer: number | undefined;
+    const outerTimer = window.setTimeout(() => {
+      setLocation(loc);
+      setSymptoms([sym]);
+      innerTimer = window.setTimeout(() => {
+        void generateMatchAndNearby({ location: loc, symptomsCombined: sym });
+      }, 50);
+    }, 0);
+    return () => {
+      window.clearTimeout(outerTimer);
+      if (innerTimer) window.clearTimeout(innerTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot agent bootstrap from parent intake
+  }, [isAgent, agentAutoRun, agentInitialLocation, agentInitialSymptomsText]);
+
   const locDisplay = location.trim() || "your area";
   const rawCount = placesRaw.length;
   const shownCount = filteredSorted.length;
@@ -365,18 +404,26 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
     <div className="mx-auto w-full min-w-0 max-w-[1200px] space-y-3 pb-2 sm:space-y-4 sm:pb-3">
       <header className="space-y-0.5">
         <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          Find the right specialist
+          {isAgent ? "Zyra is pulling live options" : "Find the right specialist"}
         </h1>
         <p className="text-sm text-muted">
-          Based on your symptoms, here&apos;s who you can consult next.
+          {isAgent
+            ? "Your intake is already applied — Zyra runs doctor-match and nearby listings so everything stays in one agent workflow."
+            : "Based on your symptoms, here's who you can consult next."}
         </p>
       </header>
 
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
+      <div
+        className={`grid grid-cols-1 items-start gap-4 ${isAgent ? "" : "lg:grid-cols-[320px_minmax(0,1fr)]"} lg:gap-6`}
+      >
         {/* Left: inputs — fixed ~320px on desktop, sticky */}
-        <aside className="order-1 w-full min-w-0 lg:sticky lg:top-[4.75rem] lg:z-0 lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-y-auto lg:pr-1">
+        <aside
+          className={`order-1 w-full min-w-0 ${isAgent ? "" : "lg:sticky lg:top-[4.75rem] lg:z-0 lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-y-auto lg:pr-1"}`}
+        >
           <div className="space-y-2.5 rounded-xl border border-border/80 bg-surface/90 p-3 shadow-sm sm:p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Inputs</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+              {isAgent ? "Refine search" : "Inputs"}
+            </p>
             <div>
               <label
                 htmlFor="doctor-match-input"
@@ -424,20 +471,22 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
                 />
               </div>
               {symptomError ? <p className="mt-0.5 text-[11px] text-red-700">{symptomError}</p> : null}
-              <div className="mt-1 flex flex-wrap gap-1">
-                {EXAMPLE_SYMPTOMS.map((symptom) => (
-                  <button
-                    key={symptom}
-                    type="button"
-                    onClick={() => {
-                      addSymptomChip(symptom);
-                    }}
-                    className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted transition hover:border-accent/35 hover:bg-soft-rose/30 hover:text-foreground"
-                  >
-                    {symptom}
-                  </button>
-                ))}
-              </div>
+              {!isAgent ? (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {EXAMPLE_SYMPTOMS.map((symptom) => (
+                    <button
+                      key={symptom}
+                      type="button"
+                      onClick={() => {
+                        addSymptomChip(symptom);
+                      }}
+                      className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted transition hover:border-accent/35 hover:bg-soft-rose/30 hover:text-foreground"
+                    >
+                      {symptom}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <div>
@@ -491,7 +540,7 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
               disabled={generateLoading || placesLoading}
               className="flex min-h-10 w-full items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Find specialists
+              {isAgent ? "Let Zyra research care options" : "Find specialists"}
             </button>
           </div>
         </aside>
@@ -504,16 +553,32 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
             </h2>
             {(generateLoading || placesLoading) && hasGenerated ? (
               <div className="rounded-xl border border-dashed border-accent/25 bg-soft-rose/15 px-4 py-6 text-center text-sm text-muted sm:py-7">
-                Finding a match and nearby practices…
+                {isAgent
+                  ? "Zyra is running doctor-match and live listings…"
+                  : "Finding a match and nearby practices…"}
               </div>
             ) : !hasGenerated ? (
               <div className="rounded-xl border border-dashed border-border/70 bg-background/60 px-4 py-6 text-center text-sm text-muted sm:py-8">
-                Add symptoms and location, then tap{" "}
-                <span className="font-medium text-foreground">Find specialists</span>.
+                {isAgent ? (
+                  <>
+                    Zyra will run doctor-match and nearby listings from your intake. Tap{" "}
+                    <span className="font-medium text-foreground">
+                      Let Zyra research care options
+                    </span>{" "}
+                    if auto-run did not start.
+                  </>
+                ) : (
+                  <>
+                    Add symptoms and location, then tap{" "}
+                    <span className="font-medium text-foreground">Find specialists</span>.
+                  </>
+                )}
               </div>
             ) : doctorMatchResult ? (
               <div className="rounded-xl border border-border/80 bg-surface/90 px-4 py-3 shadow-sm sm:px-5 sm:py-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Suggested specialist</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                  {isAgent ? "Zyra researched these care matches" : "Suggested specialist"}
+                </p>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
                   <div className="min-w-0 flex-1">
                     <p className="font-serif text-lg font-semibold leading-tight text-foreground sm:text-xl">
@@ -538,7 +603,7 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
             aria-labelledby="nearby-specialists-heading"
           >
             <h2 id="nearby-specialists-heading" className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              Nearby specialists
+              {isAgent ? "Providers Zyra analyzed for your case" : "Nearby specialists"}
             </h2>
             <p className="mt-0.5 text-[10px] leading-snug text-muted/90">Google Places · up to 20 per page</p>
 
@@ -735,7 +800,7 @@ export function SpecialistsSearch({ savedPlaceIds = [] }: SpecialistsSearchProps
                               rel="noopener noreferrer"
                               className="flex min-h-10 w-full items-center justify-center rounded-full border border-accent/40 bg-background px-3 text-xs font-semibold text-accent transition hover:bg-soft-rose/40"
                             >
-                              Open in Maps
+                              {isAgent ? "Review clinic" : "Open in Maps"}
                             </a>
                             {pid ? (
                               <SavedSpecialistButton

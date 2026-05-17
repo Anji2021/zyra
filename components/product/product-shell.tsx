@@ -4,7 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AppPageShell } from "@/components/product/app-page-shell";
 import { AppTopBar } from "@/components/product/app-top-bar";
-import { productMobileNav, productSidebarNav } from "@/lib/zyra/navigation";
+import { HACKATHON_MODE } from "@/lib/featureFlags";
+import {
+  productHackathonMobileNav,
+  productHackathonSidebarNav,
+  productMobileNav,
+  productSidebarNav,
+} from "@/lib/zyra/navigation";
 import { MedicalStrip } from "./medical-strip";
 
 function navIsActive(pathname: string, href: string): boolean {
@@ -45,6 +51,11 @@ export function ProductShell({
 }: ProductShellProps) {
   const pathname = usePathname();
 
+  const sidebarNav = HACKATHON_MODE ? productHackathonSidebarNav : productSidebarNav;
+  const mobileNav = HACKATHON_MODE ? productHackathonMobileNav : productMobileNav;
+  const isHackathonAgentWorkspace =
+    HACKATHON_MODE && pathname.startsWith("/app/agent");
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <div className="shrink-0">
@@ -63,7 +74,7 @@ export function ProductShell({
           </p>
 
           <nav className="mt-5 flex flex-col gap-1" aria-label="Product">
-            {productSidebarNav.map((item) => {
+            {sidebarNav.map((item) => {
               const active = navIsActive(pathname, item.href);
               const Icon = item.icon;
               return (
@@ -91,9 +102,19 @@ export function ProductShell({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <main
             id="app-main-scroll"
-            className="relative flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-6 sm:py-8 max-lg:pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10"
+            className={
+              isHackathonAgentWorkspace
+                ? "relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-2 py-2 max-lg:pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:overflow-hidden lg:pb-2"
+                : "relative flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-6 sm:py-8 max-lg:pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10"
+            }
           >
-            <AppPageShell>{children}</AppPageShell>
+            {isHackathonAgentWorkspace ? (
+              <div className="mx-auto flex h-full min-h-0 w-full max-w-[min(100%,96rem)] flex-1 flex-col">
+                {children}
+              </div>
+            ) : (
+              <AppPageShell>{children}</AppPageShell>
+            )}
           </main>
         </div>
       </div>
@@ -103,7 +124,7 @@ export function ProductShell({
         aria-label="Primary"
       >
         <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-1">
-          {productMobileNav.map((item) => {
+          {mobileNav.map((item) => {
             const active = navIsActive(pathname, item.href);
             const Icon = item.icon;
             return (

@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarHeart, ClipboardList, MapPinned } from "lucide-react";
+import { HackathonHome } from "@/components/hackathon/HackathonHome";
 import { AppPage, PageHeader, ProductCard, ResponsiveGrid } from "@/components/product/page-system";
 import { HomeGreetingHeading } from "@/components/product/home-greeting-heading";
 import { fetchCyclesForUser } from "@/lib/cycles/queries";
 import { formatCycleDate } from "@/lib/cycles/format";
+import { HACKATHON_MODE } from "@/lib/featureFlags";
 import { getProfileForUser, hasUserHealthProfileRow } from "@/lib/profiles/queries";
 import { fetchSymptomsForUser } from "@/lib/symptoms/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -61,6 +63,16 @@ export default async function HomePage() {
     hasUserHealthProfileRow(supabase, user.id),
   ]);
   const firstName = firstNameFromProfile(profile?.full_name);
+
+  if (HACKATHON_MODE) {
+    return (
+      <AppPage>
+        <HackathonHome
+          greetingName={firstName === "there" ? null : firstName}
+        />
+      </AppPage>
+    );
+  }
 
   const [cycles, symptoms] = await Promise.all([
     fetchCyclesForUser(supabase, user.id, 1),

@@ -12,22 +12,62 @@ type PageHeaderProps = {
   subtitle?: ReactNode;
   /** Primary actions — full width on small screens, inline on `sm+`. */
   actions?: ReactNode;
+  /** Tighter hero for hackathon agent single-frame layout. */
+  density?: "default" | "compact";
 };
 
-export function PageHeader({ eyebrow, title, titleAs = "h1", subtitle, actions }: PageHeaderProps) {
+export function PageHeader({
+  eyebrow,
+  title,
+  titleAs = "h1",
+  subtitle,
+  actions,
+  density = "default",
+}: PageHeaderProps) {
   const H = titleAs;
+  const compact = density === "compact";
   return (
-    <header className="min-w-0 space-y-3 sm:space-y-4">
+    <header className={compact ? "min-w-0 space-y-0.5" : "min-w-0 space-y-3 sm:space-y-4"}>
       {eyebrow ? (
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs">{eyebrow}</p>
+        <p
+          className={
+            compact
+              ? "text-[8px] font-semibold uppercase tracking-[0.18em] text-accent"
+              : "text-[10px] font-semibold uppercase tracking-[0.2em] text-accent sm:text-xs"
+          }
+        >
+          {eyebrow}
+        </p>
       ) : null}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <div className="min-w-0 flex-1 space-y-2 sm:space-y-2.5">
-          <H className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
+      <div
+        className={
+          compact
+            ? "flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+            : "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
+        }
+      >
+        <div
+          className={
+            compact ? "min-w-0 flex-1 space-y-0.5" : "min-w-0 flex-1 space-y-2 sm:space-y-2.5"
+          }
+        >
+          <H
+            className={
+              compact
+                ? "font-serif text-sm font-semibold tracking-tight text-foreground sm:text-base"
+                : "font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl lg:text-4xl"
+            }
+          >
             {title}
           </H>
           {subtitle ? (
-            <div className="max-w-2xl text-sm leading-snug text-muted sm:text-base sm:leading-relaxed">
+            <div
+              className={
+                compact
+                  ? "max-w-2xl text-[10px] leading-tight text-muted"
+                  : "max-w-2xl text-sm leading-snug text-muted sm:text-base sm:leading-relaxed"
+              }
+            >
               {subtitle}
             </div>
           ) : null}
