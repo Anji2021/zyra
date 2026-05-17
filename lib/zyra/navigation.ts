@@ -13,6 +13,7 @@ import {
   MessageCircleHeart,
   Sparkles,
 } from "lucide-react";
+import { isHackathonMode } from "@/lib/featureFlags";
 
 export type NavItem = {
   href: string;
@@ -143,5 +144,17 @@ export const productHackathonSidebarNav: NavItem[] = [
 
 export const productHackathonMobileNav: NavItem[] = productHackathonSidebarNav;
 
-/** @deprecated Use productSidebarNav or productMobileNav */
+/**
+ * Deterministic nav for the app shell. Prefer passing `hackathonMode` from the
+ * server layout so client hydration matches SSR (do not rely on client-only env).
+ */
+export function getProductSidebarNav(hackathonMode = isHackathonMode()): NavItem[] {
+  return hackathonMode ? productHackathonSidebarNav : productSidebarNav;
+}
+
+export function getProductMobileNav(hackathonMode = isHackathonMode()): NavItem[] {
+  return hackathonMode ? productHackathonMobileNav : productMobileNav;
+}
+
+/** @deprecated Use getProductSidebarNav / getProductMobileNav */
 export const productNav = productSidebarNav;

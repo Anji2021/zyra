@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { ProductShell } from "@/components/product/product-shell";
+import { HACKATHON_MODE } from "@/lib/featureFlags";
 import { getProfileForUser } from "@/lib/profiles/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ProductShell
+      hackathonMode={HACKATHON_MODE}
       userEmail={user.email ?? null}
       userDisplayName={shellDisplayName}
       userAvatarUrl={avatarUrl}

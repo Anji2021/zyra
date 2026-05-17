@@ -4,12 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AppPageShell } from "@/components/product/app-page-shell";
 import { AppTopBar } from "@/components/product/app-top-bar";
-import { HACKATHON_MODE } from "@/lib/featureFlags";
 import {
-  productHackathonMobileNav,
-  productHackathonSidebarNav,
-  productMobileNav,
-  productSidebarNav,
+  getProductMobileNav,
+  getProductSidebarNav,
 } from "@/lib/zyra/navigation";
 import { MedicalStrip } from "./medical-strip";
 
@@ -41,6 +38,8 @@ export type ProductShellProps = {
   userEmail: string | null;
   userDisplayName: string | null;
   userAvatarUrl: string | null;
+  /** Resolved on the server from NEXT_PUBLIC_HACKATHON_MODE — keeps nav SSR/client in sync. */
+  hackathonMode: boolean;
 };
 
 export function ProductShell({
@@ -48,13 +47,14 @@ export function ProductShell({
   userEmail,
   userDisplayName,
   userAvatarUrl,
+  hackathonMode,
 }: ProductShellProps) {
   const pathname = usePathname();
 
-  const sidebarNav = HACKATHON_MODE ? productHackathonSidebarNav : productSidebarNav;
-  const mobileNav = HACKATHON_MODE ? productHackathonMobileNav : productMobileNav;
+  const sidebarNav = getProductSidebarNav(hackathonMode);
+  const mobileNav = getProductMobileNav(hackathonMode);
   const isHackathonAgentWorkspace =
-    HACKATHON_MODE && pathname.startsWith("/app/agent");
+    hackathonMode && pathname.startsWith("/app/agent");
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
